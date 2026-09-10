@@ -1,38 +1,68 @@
 /**
  * Search Service Implementation
  * Integrates with FastAPI backend (/search, /search/stream)
+ * Matches the schema from output-w-image.json and frontend-guide.md
  */
 
-import { ISearchService, PlaceSearchResult } from '@/domain/models/search';
+import { ISearchService, PlaceSearchResult, SearchApiResponse } from '@/domain/models/search';
 import { apiClient } from '../api/apiClient';
+import { querySamplePlaces } from '../sampleDatasets';
 
 export class SearchService implements ISearchService {
   public async searchPlaces(query: string): Promise<PlaceSearchResult[]> {
     if (!query.trim()) return [];
 
     try {
-      const response = await apiClient.get<PlaceSearchResult[]>('/search', { query });
-      return response.data || [];
+      const response = await apiClient.get<any>('/search', { query });
+      if (response.data) {
+        // Check if response is { location, coordinates, places: [...] } as in output-w-image.json
+        if (response.data.places && Array.isArray(response.data.places)) {
+          return response.data.places.map((p: any, idx: number) => ({
+            id: p.id || `place_${idx}`,
+            name: p.name,
+            category: p.category || (response.data.location ? `${response.data.location}` : 'Heritage Spot'),
+            description: p.reason || p.must_see || p.history || p.culture || '',
+            reason: p.reason,
+            history: p.history,
+            culture: p.culture,
+            must_see: p.must_see,
+            ticket_price: p.ticket_price,
+            timings: p.timings,
+            rating: p.rating || 4.8,
+            lat: p.lat,
+            lng: p.lng,
+            image: p.image,
+            imageUrl: p.image?.url || p.imageUrl,
+          }));
+        }
+        // Direct array format
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          return response.data;
+        }
+      }
     } catch {
-      // Fallback mock places when backend is offline
-      await new Promise((r) => setTimeout(r, 400));
-      return [
-        {
-          id: 'place_1',
-          name: `${query} Fort & Palace`,
-          category: 'Historical Heritage',
-          description: 'Iconic royal heritage site with scenic sunset views.',
-          rating: 4.8,
-        },
-        {
-          id: 'place_2',
-          name: `${query} Lake & Ghats`,
-          category: 'Nature & Scenery',
-          description: 'Serene lakeside promenade with boat rides.',
-          rating: 4.6,
-        },
-      ];
+      // fallback to curated sample dataset
     }
+
+    await new Promise((r) => setTimeout(r, 200));
+    const matched = querySamplePlaces(query);
+    return matched.map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: `${p.city} • ${p.category}`,
+      description: p.reason || p.must_see || p.history || '',
+      reason: p.reason,
+      history: p.history,
+      culture: p.culture,
+      must_see: p.must_see,
+      ticket_price: p.ticket_price,
+      timings: p.timings,
+      rating: p.rating || 4.8,
+      lat: p.lat || 28.6139,
+      lng: p.lng || 77.2090,
+      imageUrl: p.imageUrl,
+      image: p.imageUrl ? { url: p.imageUrl, source: 'wikimedia' } : null,
+    }));
   }
 
   public searchPlacesStream(
@@ -54,23 +84,17 @@ export class SearchService implements ISearchService {
         },
         onComplete: (finalData) => {
           if (!cancelled) {
-            onComplete(finalData.results || []);
+            const places = finalData?.data?.places || finalData?.places || finalData?.results || [];
+            onComplete(places);
           }
         },
         onError: (err) => {
           if (!cancelled) {
-            // Fallback
             onProgress('Synthesizing results...');
-            setTimeout(() => {
+            setTimeout(async () => {
               if (!cancelled) {
-                onComplete([
-                  {
-                    id: 'place_stream_1',
-                    name: `${query} Heritage Walk`,
-                    category: 'Culture & Heritage',
-                    rating: 4.9,
-                  },
-                ]);
+                const results = await this.searchPlaces(query);
+                onComplete(results);
               }
             }, 600);
           }

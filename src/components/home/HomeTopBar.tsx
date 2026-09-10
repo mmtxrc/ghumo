@@ -1,15 +1,22 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/authContext';
 import { useTheme } from '@/context/themeContext';
 import { ThemeToggle } from '../auth/ThemeToggle';
 
 export const HomeTopBar: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const { user, isAuthenticated, logout } = useAuth();
   const { theme, isDark } = useTheme();
 
+  // Dynamic top offset: accounts for status bar insets on Android & iOS, with a clean top margin
+  const topInset = insets.top > 0
+    ? insets.top + (Platform.OS === 'android' ? 8 : 4)
+    : (Platform.OS === 'web' ? 12 : 16);
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={[styles.outerWrapper, { paddingTop: topInset }]} pointerEvents="box-none">
       <View
         style={[
           styles.container,
@@ -50,12 +57,12 @@ export const HomeTopBar: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  outerWrapper: {
     width: '100%',
     zIndex: 99,
     position: 'absolute',
@@ -66,7 +73,6 @@ const styles = StyleSheet.create({
   },
   container: {
     marginHorizontal: 16,
-    marginTop: Platform.OS === 'android' ? 12 : 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 9999,

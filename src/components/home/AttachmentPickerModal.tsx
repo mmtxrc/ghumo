@@ -135,19 +135,22 @@ export const AttachmentPickerModal: React.FC<AttachmentPickerModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
-    padding: 16,
+    alignItems: 'center',
     paddingBottom: 90,
   },
   modalCard: {
-    borderRadius: 20,
+    width: '92%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    borderRadius: 22,
     borderWidth: 1,
     padding: 18,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
     elevation: 8,
   },
   modalTitle: {

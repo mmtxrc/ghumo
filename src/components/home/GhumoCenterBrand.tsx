@@ -1,10 +1,7 @@
 import React from 'react';
-import { View, StyleSheet, Image, Text } from 'react-native';
-import { useTheme } from '@/context/themeContext';
+import { View, StyleSheet, Image } from 'react-native';
 
 export const GhumoCenterBrand: React.FC = () => {
-  const { theme, isDark } = useTheme();
-
   return (
     <View style={styles.container} pointerEvents="none">
       <View style={styles.logoWrapper}>
@@ -14,9 +11,6 @@ export const GhumoCenterBrand: React.FC = () => {
           resizeMode="contain"
         />
       </View>
-      <Text style={[styles.tagline, { color: theme.colors.text.secondary }]}>
-        Travel More. Belong Anywhere.
-      </Text>
     </View>
   );
 };
@@ -37,13 +31,5 @@ const styles = StyleSheet.create({
   logoImage: {
     width: '100%',
     height: '100%',
-  },
-  tagline: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 8,
-    letterSpacing: 0.3,
-    textAlign: 'center',
-    opacity: 0.85,
   },
 });
