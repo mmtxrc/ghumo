@@ -8,8 +8,7 @@
     "scheme": "ghumo",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.mmtxrc.ghumo"
+      "icon": "./assets/expo.icon"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,8 +17,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.mmtxrc.ghumo"
+      "predictiveBackGestureEnabled": true
     },
     "web": {
       "output": "static",
