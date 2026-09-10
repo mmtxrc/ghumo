@@ -6,6 +6,7 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AuthProvider } from '@/context/authContext';
 import { ThemeProvider as GhumoThemeProvider } from '@/context/themeContext';
+import { HomeProvider } from '@/context/homeContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,8 +16,10 @@ export default function RootLayout() {
     <GhumoThemeProvider>
       <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthProvider>
-          <AnimatedSplashOverlay />
-          <AppTabs />
+          <HomeProvider>
+            <AnimatedSplashOverlay />
+            <AppTabs />
+          </HomeProvider>
         </AuthProvider>
       </NavigationThemeProvider>
     </GhumoThemeProvider>

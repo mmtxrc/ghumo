@@ -2,10 +2,8 @@ import React from 'react';
 import {
   StyleSheet,
   View,
-  Text,
   ScrollView,
   SafeAreaView,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -15,9 +13,14 @@ import { useAuth } from '@/context/authContext';
 import { useTheme } from '@/context/themeContext';
 import { BrandHeader } from '@/components/auth/BrandHeader';
 import { AuthCard } from '@/components/auth/AuthCard';
+import { MapBackground } from '@/components/home/MapBackground';
+import { GhumoCenterBrand } from '@/components/home/GhumoCenterBrand';
+import { HomeTopBar } from '@/components/home/HomeTopBar';
+import { DynamicBottomBar } from '@/components/home/DynamicBottomBar';
+import { HomeFeedResults } from '@/components/home/HomeFeedResults';
 
 export default function HomeScreen() {
-  const { user, isAuthenticated, isGuest, logout } = useAuth();
+  const { isAuthenticated, isGuest } = useAuth();
   const { theme, isDark, fadeAnim } = useTheme();
 
   // If user is not logged in and has not skipped login -> render Revamped Auth Screen
@@ -25,7 +28,7 @@ export default function HomeScreen() {
     return (
       <Animated.View style={[styles.screenRoot, { backgroundColor: theme.colors.background.hero, opacity: fadeAnim }]}>
         <StatusBar
-          barStyle={isDark ? 'light-content' : 'light-content'}
+          barStyle="light-content"
           backgroundColor={theme.colors.background.hero}
         />
         <SafeAreaView style={[styles.topSafeArea, { backgroundColor: theme.colors.background.hero }]} />
@@ -62,40 +65,27 @@ export default function HomeScreen() {
   // When logged in or skipped -> render Home Page
   return (
     <Animated.View style={[styles.homeRoot, { backgroundColor: theme.colors.background.screen, opacity: fadeAnim }]}>
-      <SafeAreaView style={[styles.homeContainer, { backgroundColor: theme.colors.background.screen }]}>
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor={theme.colors.background.screen}
-        />
-        <View style={styles.homeContent}>
-          <Text style={[styles.homeText, { color: theme.colors.text.primary }]}>home page</Text>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.colors.background.screen}
+      />
 
-          <View
-            style={[
-              styles.statusCard,
-              {
-                backgroundColor: theme.colors.background.surface,
-                borderColor: theme.colors.border.default,
-              },
-            ]}
-          >
-            <Text style={[styles.statusText, { color: theme.colors.text.secondary }]}>
-              {isAuthenticated
-                ? `Logged in as: ${user?.email || 'User'}`
-                : 'Browsing as Guest'}
-            </Text>
-            <TouchableOpacity
-              style={[styles.logoutButton, { backgroundColor: theme.colors.primary.default }]}
-              onPress={logout}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.logoutButtonText}>
-                {isAuthenticated ? 'Log Out' : 'Back to Login'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
+      {/* Layer 1: Background Map View Placeholder (prepared for MapView in next step) */}
+      <MapBackground />
+
+      {/* Layer 2: Floating Top App Bar */}
+      <HomeTopBar />
+
+      {/* Layer 3: Center Ghumo Brand Logo */}
+      <View style={styles.centerContainer}>
+        <GhumoCenterBrand />
+      </View>
+
+      {/* Layer 4: Search & AI Results Card (when active) */}
+      <HomeFeedResults />
+
+      {/* Layer 5: Dynamic Morphing Bottom Bar (AI + Search) */}
+      <DynamicBottomBar />
     </Animated.View>
   );
 }
@@ -129,53 +119,12 @@ const styles = StyleSheet.create({
   },
   homeRoot: {
     flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  homeContainer: {
+  centerContainer: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  homeContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    width: '100%',
-  },
-  homeText: {
-    fontSize: 26,
-    fontWeight: '700',
-    textTransform: 'lowercase',
-    textAlign: 'center',
-    letterSpacing: -0.5,
-  },
-  statusCard: {
-    marginTop: 28,
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: 10,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  statusText: {
-    fontSize: 13.5,
-    fontWeight: '500',
-  },
-  logoutButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginTop: 2,
-  },
-  logoutButtonText: {
-    fontSize: 12.5,
-    color: '#FFFFFF',
-    fontWeight: '600',
   },
 });
