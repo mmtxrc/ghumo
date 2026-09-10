@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/authContext';
 import { useTheme } from '@/context/themeContext';
@@ -7,8 +7,10 @@ import { ThemeToggle } from '../auth/ThemeToggle';
 
 export const HomeTopBar: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, authAction } = useAuth();
   const { theme, isDark } = useTheme();
+
+  const isLoggingOut = authAction === 'logout';
 
   // Dynamic top offset: accounts for status bar insets on Android & iOS, with a clean top margin
   const topInset = insets.top > 0
@@ -43,17 +45,23 @@ export const HomeTopBar: React.FC = () => {
               {
                 backgroundColor: isDark ? '#242220' : '#F0EBE1',
                 borderColor: isDark ? '#35312D' : '#E2DBD0',
+                opacity: isLoggingOut ? 0.6 : 1,
               },
             ]}
             onPress={logout}
+            disabled={isLoggingOut}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityRole="button"
             accessibilityLabel={isAuthenticated ? 'Log Out' : 'Login'}
           >
-            <Text style={[styles.authButtonText, { color: theme.colors.text.secondary }]}>
-              {isAuthenticated ? 'Log Out' : 'Login'}
-            </Text>
+            {isLoggingOut ? (
+              <ActivityIndicator size="small" color={theme.colors.text.secondary} />
+            ) : (
+              <Text style={[styles.authButtonText, { color: theme.colors.text.secondary }]}>
+                {isAuthenticated ? 'Log Out' : 'Login'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>

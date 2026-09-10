@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,8 +11,10 @@ import {
 } from 'react-native';
 import { useAuth } from '@/context/authContext';
 import { useTheme } from '@/context/themeContext';
+import { logger } from '@/utils/logger';
 import { BrandHeader } from '@/components/auth/BrandHeader';
 import { AuthCard } from '@/components/auth/AuthCard';
+import { AuthLoadingOverlay } from '@/components/auth/AuthLoadingOverlay';
 import { MapBackground } from '@/components/home/MapBackground';
 import { GhumoCenterBrand } from '@/components/home/GhumoCenterBrand';
 import { HomeTopBar } from '@/components/home/HomeTopBar';
@@ -22,6 +24,10 @@ import { HomeFeedResults } from '@/components/home/HomeFeedResults';
 export default function HomeScreen() {
   const { isAuthenticated, isGuest } = useAuth();
   const { theme, isDark, fadeAnim } = useTheme();
+
+  useEffect(() => {
+    logger.app('HomeScreen active state', { isAuthenticated, isGuest });
+  }, [isAuthenticated, isGuest]);
 
   // If user is not logged in and has not skipped login -> render Revamped Auth Screen
   if (!isAuthenticated && !isGuest) {
@@ -58,6 +64,7 @@ export default function HomeScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        <AuthLoadingOverlay />
       </Animated.View>
     );
   }
@@ -76,16 +83,14 @@ export default function HomeScreen() {
       {/* Layer 2: Floating Top App Bar */}
       <HomeTopBar />
 
-      {/* Layer 3: Center Ghumo Brand Logo */}
-      <View style={styles.centerContainer}>
-        <GhumoCenterBrand />
-      </View>
-
-      {/* Layer 4: Search & AI Results Card (when active) */}
+      {/* Layer 3: Search & AI Results Card (when active) */}
       <HomeFeedResults />
 
       {/* Layer 5: Dynamic Morphing Bottom Bar (AI + Search) */}
       <DynamicBottomBar />
+
+      {/* Layer 6: Auth Action Loading Overlay */}
+      <AuthLoadingOverlay />
     </Animated.View>
   );
 }

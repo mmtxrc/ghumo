@@ -1,15 +1,22 @@
 /**
  * Home State Management & Context
- * Orchestrates Search, AI Prompt interactions, and Sheet Expansion states.
+ * Orchestrates Search, AI Prompt interactions, Live Suggestions, and Rating Feedback.
  */
 
-import React, { createContext, useContext, useState, useMemo } from 'react';
-import { PlaceSearchResult, ISearchService } from '@/domain/models/search';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import * as Location from 'expo-location';
+import { PlaceSearchResult, ISearchService, HiddenGemItem, TravelTipItem, NearbyPoiItem } from '@/domain/models/search';
 import { AttachmentItem, AIPromptResponse, IAIService } from '@/domain/models/ai';
 import { defaultSearchService } from '@/data/services/searchService';
 import { defaultAIService } from '@/data/services/aiService';
+import { logger } from '@/utils/logger';
 
 export type HomeInteractionMode = 'search' | 'ai';
+
+export interface UserLocation {
+  latitude: number;
+  longitude: number;
+}
 
 interface HomeContextType {
   activeMode: HomeInteractionMode;
@@ -18,10 +25,17 @@ interface HomeContextType {
   aiPrompt: string;
   attachments: AttachmentItem[];
   isSearching: boolean;
+  isLoadingSuggestions: boolean;
   isProcessingAI: boolean;
+  suggestions: PlaceSearchResult[];
   searchResults: PlaceSearchResult[];
+  hiddenGems: HiddenGemItem[];
+  tips: TravelTipItem[];
+  nearbyPlaces: NearbyPoiItem[];
   aiResponse: AIPromptResponse | null;
   statusMessage: string | null;
+  userLocation: UserLocation | null;
+  selectedPlaceId: string | null;
   setActiveMode: (mode: HomeInteractionMode) => void;
   setIsExpanded: (expanded: boolean) => void;
   toggleExpanded: () => void;
@@ -31,9 +45,13 @@ interface HomeContextType {
   clearAiPrompt: () => void;
   addAttachment: (item: AttachmentItem) => void;
   removeAttachment: (id: string) => void;
+  loadSuggestions: () => Promise<void>;
   performSearch: (query?: string) => Promise<void>;
   submitAIPrompt: (prompt?: string) => Promise<void>;
+  submitPlaceRating: (targetId: string, rating: number, targetType?: 'place' | 'itinerary') => Promise<void>;
   clearResults: () => void;
+  requestUserLocation: () => Promise<void>;
+  setSelectedPlaceId: (id: string | null) => void;
 }
 
 const HomeContext = createContext<HomeContextType | undefined>(undefined);
@@ -55,10 +73,17 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   const [aiPrompt, setAiPrompt] = useState('');
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [suggestions, setSuggestions] = useState<PlaceSearchResult[]>([]);
   const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
+  const [hiddenGems, setHiddenGems] = useState<HiddenGemItem[]>([]);
+  const [tips, setTips] = useState<TravelTipItem[]>([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPoiItem[]>([]);
   const [aiResponse, setAiResponse] = useState<AIPromptResponse | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
 
   const toggleExpanded = () => setIsExpanded((prev) => !prev);
   const clearSearchQuery = () => setSearchQuery('');
@@ -75,7 +100,52 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   const clearResults = () => {
     setSearchResults([]);
     setAiResponse(null);
+    setHiddenGems([]);
+    setTips([]);
+    setNearbyPlaces([]);
     setStatusMessage(null);
+    setSelectedPlaceId(null);
+  };
+
+  // Ask for user geolocation on mount
+  useEffect(() => {
+    requestUserLocation();
+  }, []);
+
+  const requestUserLocation = async () => {
+    try {
+      logger.app('Requesting user geolocation permissions...');
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        logger.warn('HomeContext', 'Location permission denied');
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      logger.app(`User location retrieved: lat ${loc.coords.latitude}, lng ${loc.coords.longitude}`);
+      setUserLocation({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+    } catch (err: any) {
+      logger.warn('HomeContext', 'Error fetching user location', err?.message);
+    }
+  };
+
+  const loadSuggestions = async () => {
+    setIsLoadingSuggestions(true);
+    try {
+      logger.app('Loading suggestions via GET /suggestions...');
+      const list = await searchService.getSuggestions(10);
+      setSuggestions(list);
+    } catch (err: any) {
+      logger.warn('HomeContext', 'Error loading suggestions', err?.message);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
   };
 
   const performSearch = async (queryToSearch?: string) => {
@@ -83,10 +153,24 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     if (!q) return;
 
     setIsSearching(true);
-    setStatusMessage(`Searching "${q}"...`);
+    setStatusMessage(`Searching "${q}" across map layers...`);
     try {
       const results = await searchService.searchPlaces(q);
       setSearchResults(results);
+
+      // Extract chained data if present on the primary result item
+      if (results.length > 0) {
+        if (results[0].hidden_gems && results[0].hidden_gems.length > 0) {
+          setHiddenGems(results[0].hidden_gems);
+        }
+        if (results[0].tips && results[0].tips.length > 0) {
+          setTips(results[0].tips);
+        }
+        if (results[0].nearby_places && results[0].nearby_places.length > 0) {
+          setNearbyPlaces(results[0].nearby_places);
+        }
+      }
+
       setStatusMessage(results.length > 0 ? `Found ${results.length} places for "${q}"` : 'No places found');
     } catch (err: any) {
       setStatusMessage('Search error: Could not fetch places');
@@ -117,6 +201,53 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     }
   };
 
+  const submitPlaceRating = async (targetId: string, rating: number, targetType: 'place' | 'itinerary' = 'place') => {
+    try {
+      logger.app(`Submitting ${rating}-star rating for ${targetType}: ${targetId}`);
+      const res = await searchService.submitTargetFeedback({
+        user_id_or_anon: 'anon_traveler',
+        target_type: targetType,
+        target_id: targetId,
+        rating,
+      });
+
+      // Update local state rating gracefully
+      setSearchResults((prev) =>
+        prev.map((item) =>
+          item.id === targetId || item.name === targetId
+            ? {
+                ...item,
+                rating: res.average_rating || rating,
+                feedback: {
+                  averageRating: res.average_rating || rating,
+                  ratingCount: res.rating_count || 1,
+                  weightedScore: res.weighted_score || rating,
+                },
+              }
+            : item
+        )
+      );
+
+      setSuggestions((prev) =>
+        prev.map((item) =>
+          item.id === targetId || item.name === targetId
+            ? {
+                ...item,
+                rating: res.average_rating || rating,
+                feedback: {
+                  averageRating: res.average_rating || rating,
+                  ratingCount: res.rating_count || 1,
+                  weightedScore: res.weighted_score || rating,
+                },
+              }
+            : item
+        )
+      );
+    } catch (err: any) {
+      logger.warn('HomeContext', 'Error submitting rating feedback', err?.message);
+    }
+  };
+
   const value = useMemo(
     () => ({
       activeMode,
@@ -125,10 +256,17 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       aiPrompt,
       attachments,
       isSearching,
+      isLoadingSuggestions,
       isProcessingAI,
+      suggestions,
       searchResults,
+      hiddenGems,
+      tips,
+      nearbyPlaces,
       aiResponse,
       statusMessage,
+      userLocation,
+      selectedPlaceId,
       setActiveMode,
       setIsExpanded,
       toggleExpanded,
@@ -138,9 +276,13 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       clearAiPrompt,
       addAttachment,
       removeAttachment,
+      loadSuggestions,
       performSearch,
       submitAIPrompt,
+      submitPlaceRating,
       clearResults,
+      requestUserLocation,
+      setSelectedPlaceId,
     }),
     [
       activeMode,
@@ -149,10 +291,17 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       aiPrompt,
       attachments,
       isSearching,
+      isLoadingSuggestions,
       isProcessingAI,
+      suggestions,
       searchResults,
+      hiddenGems,
+      tips,
+      nearbyPlaces,
       aiResponse,
       statusMessage,
+      userLocation,
+      selectedPlaceId,
     ]
   );
 
