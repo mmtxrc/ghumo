@@ -1,6 +1,6 @@
 /**
  * Search & Discovery Domain Models
- * Aligned with frontend-guide.md and /search & /search/stream API schemas
+ * Aligned with frontend-guide.md and /search, /suggestions, /nearby, /hidden-gems, /tips API schemas
  */
 
 export interface PlaceSearchQuery {
@@ -13,12 +13,48 @@ export interface PlaceSearchQuery {
 export interface PlaceImage {
   url?: string;
   source?: string;
+  provider?: string;
   attribution?: string;
+}
+
+export interface PlaceFeedback {
+  averageRating?: number;
+  ratingCount?: number;
+  weightedScore?: number;
+}
+
+export interface HiddenGemItem {
+  name: string;
+  category?: string;
+  description?: string;
+  confidence_score?: number;
+  source?: string;
+}
+
+export interface TravelTipItem {
+  id?: number;
+  city?: string;
+  place_id?: number;
+  tip_text?: string;
+  text?: string;
+  category?: string;
+  source?: string;
+  confidence_score?: number;
+}
+
+export interface NearbyPoiItem {
+  name: string;
+  lat?: number;
+  lng?: number;
+  type?: string;
+  distance_meters?: number;
 }
 
 export interface PlaceSearchResult {
   id: string;
+  place_id?: number;
   name: string;
+  city?: string;
   category?: string;
   description?: string;
   reason?: string;
@@ -30,8 +66,12 @@ export interface PlaceSearchResult {
   lat?: number;
   lng?: number;
   rating?: number;
+  feedback?: PlaceFeedback;
   imageUrl?: string;
   image?: PlaceImage | null;
+  hidden_gems?: HiddenGemItem[];
+  tips?: TravelTipItem[];
+  nearby_places?: NearbyPoiItem[];
 }
 
 export interface SearchApiResponse {
@@ -40,11 +80,41 @@ export interface SearchApiResponse {
     lat: number;
     lng: number;
   };
-  places: PlaceSearchResult[];
+  places?: PlaceSearchResult[];
+  food?: any[];
+  markets?: any[];
+  hidden_gems?: HiddenGemItem[];
+  tips?: TravelTipItem[];
+}
+
+export interface SuggestionsResponse {
+  total: number;
+  suggestions: PlaceSearchResult[];
+}
+
+export interface TargetFeedbackPayload {
+  user_id_or_anon: string;
+  target_type: 'place' | 'itinerary';
+  target_id: string;
+  rating: number;
+}
+
+export interface TargetFeedbackResponse {
+  status: string;
+  target_type: string;
+  target_id: string;
+  average_rating: number;
+  rating_count: number;
+  weighted_score: number;
 }
 
 export interface ISearchService {
   searchPlaces(query: string): Promise<PlaceSearchResult[]>;
+  getSuggestions(limit?: number, city?: string, category?: string): Promise<PlaceSearchResult[]>;
+  getHiddenGems(location: string): Promise<HiddenGemItem[]>;
+  getTips(city?: string, placeId?: number): Promise<TravelTipItem[]>;
+  getNearby(lat: number, lng: number, radius?: number): Promise<{ places: NearbyPoiItem[]; food: NearbyPoiItem[] }>;
+  submitTargetFeedback(payload: TargetFeedbackPayload): Promise<TargetFeedbackResponse>;
   searchPlacesStream(
     query: string,
     onProgress: (step: string) => void,

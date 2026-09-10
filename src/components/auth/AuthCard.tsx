@@ -21,7 +21,7 @@ import { PrimaryButton } from './PrimaryButton';
 import { HeritageFooterIllustration } from './HeritageFooterIllustration';
 
 export const AuthCard: React.FC = () => {
-  const { login, signUp, loginWithOAuth, skipAuth, isLoading, error, clearError } = useAuth();
+  const { login, signUp, loginWithOAuth, skipAuth, isLoading, authAction, error, clearError } = useAuth();
   const { theme, isDark } = useTheme();
 
   const [mode, setMode] = useState<AuthMode>('login');
@@ -29,6 +29,8 @@ export const AuthCard: React.FC = () => {
   const [password, setPassword] = useState('');
   const [newsletterConsent, setNewsletterConsent] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
+
+  const isAuthProcessing = isLoading || Boolean(authAction);
 
   // Animation values for smooth tab transition
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -133,7 +135,7 @@ export const AuthCard: React.FC = () => {
         },
       ]}
     >
-      <View style={styles.cardContent}>
+      <View style={styles.cardContent} pointerEvents={isAuthProcessing ? 'none' : 'auto'}>
         {/* Top Tab Pill Switch + Modular Theme Toggle beside it */}
         <View style={styles.topSwitchRow}>
           <AuthTabSwitch activeTab={mode} onTabChange={handleTabChange} />

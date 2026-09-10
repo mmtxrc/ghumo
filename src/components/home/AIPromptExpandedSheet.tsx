@@ -104,9 +104,9 @@ export const AIPromptExpandedSheet: React.FC = () => {
                 <Text style={[styles.dayTitle, { color: theme.colors.text.primary }]}>
                   Day {day.dayNumber}: {day.title}
                 </Text>
-                {day.places.map((p, idx) => (
+                {(day.places || day.activities || []).map((p: any, idx: number) => (
                   <Text key={idx} style={[styles.placeBullet, { color: theme.colors.text.secondary }]}>
-                    • <Text style={{ fontWeight: '600', color: theme.colors.text.primary }}>{p.time}</Text> - {p.name}: {p.description}
+                    • <Text style={{ fontWeight: '600', color: theme.colors.text.primary }}>{p.time || p.time_slot}</Text> - {p.name || p.place}: {p.description || p.purpose}
                   </Text>
                 ))}
               </View>

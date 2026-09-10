@@ -244,19 +244,20 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose }) => {
                 <Text style={[styles.dayTitle, { color: theme.colors.primary.default }]}>
                   Day {day.dayNumber}: {day.title}
                 </Text>
-                {day.places.map((p, idx) => (
+                {(day.places || day.activities || []).map((p: any, idx: number) => (
                   <View key={idx} style={styles.placeItemRow}>
                     <Text style={[styles.timeBadge, { color: theme.colors.text.muted }]}>
-                      {p.time}
+                      {p.time || p.time_slot}
                     </Text>
                     <View style={styles.placeItemDetails}>
                       <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
-                        {p.name}
+                        {p.name || p.place}
                       </Text>
-                      <Text style={[styles.placeDescription, { color: theme.colors.text.secondary }]}>
-                        {p.description}
-                      </Text>
-                    </View>
+                      {Boolean(p.description || p.purpose) && (
+                        <Text style={[styles.placeDescription, { color: theme.colors.text.secondary }]}>
+                          {p.description || p.purpose}
+                        </Text>
+                      )}</View>
                   </View>
                 ))}
               </View>
