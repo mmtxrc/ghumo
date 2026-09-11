@@ -172,36 +172,49 @@ export const MapBackground: React.FC = () => {
     .user-pulse-marker {
       width: 24px;
       height: 24px;
+      box-sizing: border-box;
       background: rgba(217, 83, 56, 0.35);
       border: 2px solid #D95338;
       border-radius: 50%;
       box-shadow: 0 0 14px rgba(217, 83, 56, 0.85);
-      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: translate(-50%, -50%);
     }
     .user-pulse-dot {
       width: 10px;
       height: 10px;
+      box-sizing: border-box;
       background: #D95338;
       border-radius: 50%;
-      position: absolute;
-      top: 5px;
-      left: 5px;
-      border: 1px solid #FFFFFF;
+      border: 1.5px solid #FFFFFF;
+      flex-shrink: 0;
     }
     .place-pin-marker {
       background: #D95338;
-      color: white;
-      padding: 4px 8px;
-      border-radius: 12px;
+      color: #FFFFFF;
+      padding: 5px 12px;
+      border-radius: 9999px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 700;
       white-space: nowrap;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.35);
-      border: 1.5px solid rgba(255,255,255,0.8);
-      display: flex;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+      border: 1.5px solid rgba(255,255,255,0.85);
+      display: inline-flex;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
+      text-align: center;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+    }
+    .place-pin-marker.selected-pin {
+      background: #E85D04;
+      border-color: #FFFFFF;
+      box-shadow: 0 0 0 3px rgba(235,94,40,0.45), 0 6px 16px rgba(0,0,0,0.5);
+      transform: translate(-50%, -50%) scale(1.08);
+      z-index: 9999 !important;
     }
     .custom-popup .leaflet-popup-content-wrapper {
       background: ${isDark ? '#2B2825' : '#FFFFFF'};
@@ -248,8 +261,9 @@ export const MapBackground: React.FC = () => {
         var userIcon = L.divIcon({
           className: '',
           html: '<div class="user-pulse-marker"><div class="user-pulse-dot"></div></div>',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+          popupAnchor: [0, -14]
         });
 
         if (userMarker) {
@@ -257,7 +271,7 @@ export const MapBackground: React.FC = () => {
         } else {
           userMarker = L.marker([uLat, uLng], { icon: userIcon })
             .addTo(map)
-            .bindPopup('<b style="color:#D95338;display:flex;align-items:center;gap:4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="#D95338"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>You Are Here</b><span style="font-size:11px;color:#888;">Current Geolocation</span>', { className: 'custom-popup' });
+            .bindPopup('<b style="color:#D95338;display:flex;align-items:center;gap:4px;">You Are Here</b><span style="font-size:11px;color:#888;">Current Geolocation</span>', { className: 'custom-popup' });
         }
       }
 
@@ -278,9 +292,10 @@ export const MapBackground: React.FC = () => {
           var isSelected = data.selectedPlaceId === pin.id;
           var pinIcon = L.divIcon({
             className: '',
-            html: '<div class="place-pin-marker' + (isSelected ? ' selected-pin' : '') + '"><svg width="12" height="12" viewBox="0 0 24 24" fill="#D95338" style="vertical-align:middle;margin-right:3px;"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>' + pin.name + '</div>',
-            iconSize: [null, 24],
-            iconAnchor: [30, 12]
+            html: '<div class="place-pin-marker' + (isSelected ? ' selected-pin' : '') + '">' + pin.name + '</div>',
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+            popupAnchor: [0, -14]
           });
 
           var popupContent = '<b style="display:flex;align-items:center;gap:4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="#D95338"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>' + pin.name + '</b><span style="font-size:11px;color:#D95338;">' + pin.category + '</span>';
