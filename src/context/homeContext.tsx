@@ -1,11 +1,6 @@
-/**
- * Home State Management & Context
- * Orchestrates Search, AI Prompt interactions, Live Suggestions, and Rating Feedback.
- */
-
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import * as Location from 'expo-location';
-import { PlaceSearchResult, ISearchService, HiddenGemItem, TravelTipItem, NearbyPoiItem } from '@/domain/models/search';
+import { PlaceSearchResult, ISearchService, SearchCategorizedData, HiddenGemItem, TravelTipItem, NearbyPoiItem } from '@/domain/models/search';
 import { AttachmentItem, AIPromptResponse, IAIService } from '@/domain/models/ai';
 import { defaultSearchService } from '@/data/services/searchService';
 import { defaultAIService } from '@/data/services/aiService';
@@ -29,6 +24,10 @@ interface HomeContextType {
   isProcessingAI: boolean;
   suggestions: PlaceSearchResult[];
   searchResults: PlaceSearchResult[];
+  categorizedResults: SearchCategorizedData | null;
+  activeMapCategory: string;
+  searchHistory: string[];
+  promptHistory: string[];
   hiddenGems: HiddenGemItem[];
   tips: TravelTipItem[];
   nearbyPlaces: NearbyPoiItem[];
@@ -46,6 +45,7 @@ interface HomeContextType {
   setAiPrompt: (p: string) => void;
   clearSearchQuery: () => void;
   clearAiPrompt: () => void;
+  setActiveMapCategory: (category: string) => void;
   addAttachment: (item: AttachmentItem) => void;
   removeAttachment: (id: string) => void;
   loadSuggestions: () => Promise<void>;
@@ -65,6 +65,22 @@ interface HomeProviderProps {
   aiService?: IAIService;
 }
 
+const DEFAULT_SEARCH_HISTORY = [
+  'Hauz Khas',
+  'Chandni Chowk',
+  'Connaught Place',
+  'Lodi Gardens',
+  'Qutub Minar',
+];
+
+const DEFAULT_PROMPT_HISTORY = [
+  '3-Day Royal Heritage in Jaipur covering forts and food',
+  'Scenic lakeside cafes and sunsets in Udaipur',
+  'Old Delhi culinary street food walk and spice bazaars',
+  'Spiritual weekend trail in Varanasi and ghats',
+  'Heritage architecture and art cafes in South Delhi',
+];
+
 export const HomeProvider: React.FC<HomeProviderProps> = ({
   children,
   searchService = defaultSearchService,
@@ -80,6 +96,10 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [suggestions, setSuggestions] = useState<PlaceSearchResult[]>([]);
   const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
+  const [categorizedResults, setCategorizedResults] = useState<SearchCategorizedData | null>(null);
+  const [activeMapCategory, setActiveMapCategoryState] = useState<string>('all');
+  const [searchHistory, setSearchHistory] = useState<string[]>(DEFAULT_SEARCH_HISTORY);
+  const [promptHistory, setPromptHistory] = useState<string[]>(DEFAULT_PROMPT_HISTORY);
   const [hiddenGems, setHiddenGems] = useState<HiddenGemItem[]>([]);
   const [tips, setTips] = useState<TravelTipItem[]>([]);
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPoiItem[]>([]);
@@ -97,6 +117,23 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   const clearSearchQuery = () => setSearchQuery('');
   const clearAiPrompt = () => setAiPrompt('');
 
+  const setActiveMapCategory = (category: string) => {
+    setActiveMapCategoryState(category);
+    // Auto-select the first place of this category if present
+    if (categorizedResults) {
+      let list: PlaceSearchResult[] = [];
+      if (category === 'food') list = categorizedResults.food;
+      else if (category === 'markets') list = categorizedResults.markets;
+      else if (category === 'attractions') list = categorizedResults.attractions;
+      else if (category === 'hidden_gems') list = categorizedResults.hidden_gems;
+      else list = categorizedResults.places;
+
+      if (list.length > 0) {
+        setSelectedPlaceId(list[0].id);
+      }
+    }
+  };
+
   const addAttachment = (item: AttachmentItem) => {
     setAttachments((prev) => [...prev, item]);
   };
@@ -112,6 +149,8 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     setIsSearching(false);
     setIsProcessingAI(false);
     setSearchResults([]);
+    setCategorizedResults(null);
+    setActiveMapCategoryState('all');
     setAiResponse(null);
     setHiddenGems([]);
     setTips([]);
@@ -165,28 +204,37 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     const q = (queryToSearch !== undefined ? queryToSearch : searchQuery).trim();
     if (!q) return;
 
+    // Save to last 5 search history items (deduped)
+    setSearchHistory((prev) => [q, ...prev.filter((item) => item.toLowerCase() !== q.toLowerCase())].slice(0, 5));
+
     const reqId = ++currentSearchRequestId.current;
     setIsSearching(true);
     setStatusMessage(`Searching "${q}" across map layers...`);
     try {
-      const results = await searchService.searchPlaces(q);
+      const categorized = await searchService.searchPlacesCategorized(q);
       if (reqId !== currentSearchRequestId.current) return; // Request was aborted/cancelled
-      setSearchResults(results);
 
-      // Extract chained data if present on the primary result item
-      if (results.length > 0) {
-        if (results[0].hidden_gems && results[0].hidden_gems.length > 0) {
-          setHiddenGems(results[0].hidden_gems);
-        }
-        if (results[0].tips && results[0].tips.length > 0) {
-          setTips(results[0].tips);
-        }
-        if (results[0].nearby_places && results[0].nearby_places.length > 0) {
-          setNearbyPlaces(results[0].nearby_places);
-        }
+      setCategorizedResults(categorized);
+      setSearchResults(categorized.places);
+      setActiveMapCategoryState('all');
+
+      if (categorized.tips && categorized.tips.length > 0) {
+        setTips(categorized.tips);
+      }
+      if (categorized.hidden_gems && categorized.hidden_gems.length > 0) {
+        setHiddenGems(categorized.hidden_gems.map((h) => ({ name: h.name, description: h.reason || h.description })));
       }
 
-      setStatusMessage(results.length > 0 ? `Found ${results.length} places for "${q}"` : 'No places found');
+      setStatusMessage(categorized.places.length > 0 ? `Found ${categorized.places.length} places for "${q}"` : 'No places found');
+
+      // Auto-close sheet when search is hit and complete
+      setIsExpanded(false);
+      setIsMapVisible(true);
+
+      // Auto-select first place on carousel and map
+      if (categorized.places.length > 0) {
+        setSelectedPlaceId(categorized.places[0].id);
+      }
     } catch (err: any) {
       if (reqId === currentSearchRequestId.current) {
         setStatusMessage('Search error: Could not fetch places');
@@ -202,6 +250,9 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     const p = (promptToSubmit !== undefined ? promptToSubmit : aiPrompt).trim();
     if (!p) return;
 
+    // Save to last 5 prompt history items (deduped)
+    setPromptHistory((prev) => [p, ...prev.filter((item) => item !== p)].slice(0, 5));
+
     const reqId = ++currentAIRequestId.current;
     setIsProcessingAI(true);
     setStatusMessage('Ghumo AI is crafting your travel itinerary...');
@@ -215,6 +266,15 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       setStatusMessage(`Itinerary ready: ${response.title}`);
       setAiPrompt('');
       setAttachments([]);
+
+      // Auto-close sheet when prompt is completed
+      setIsExpanded(false);
+      setIsMapVisible(true);
+
+      // Auto-select first entry on carousel and map
+      if (response.recommended_places && response.recommended_places.length > 0) {
+        setSelectedPlaceId(`ai_p_0`);
+      }
     } catch (err: any) {
       if (reqId === currentAIRequestId.current) {
         setStatusMessage('AI Generation error: Please try again');
@@ -302,6 +362,11 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       setAiPrompt,
       clearSearchQuery,
       clearAiPrompt,
+      categorizedResults,
+      activeMapCategory,
+      searchHistory,
+      promptHistory,
+      setActiveMapCategory,
       addAttachment,
       removeAttachment,
       loadSuggestions,
@@ -323,6 +388,10 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       isProcessingAI,
       suggestions,
       searchResults,
+      categorizedResults,
+      activeMapCategory,
+      searchHistory,
+      promptHistory,
       hiddenGems,
       tips,
       nearbyPlaces,

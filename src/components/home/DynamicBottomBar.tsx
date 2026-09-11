@@ -9,7 +9,7 @@
  * - Prompt send button: Paper plane icon embedded directly inside the prompt text box.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import {
   Keyboard,
   Dimensions,
 } from 'react-native';
-import { Gesture, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView, type PanGesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -37,6 +37,7 @@ import { useHome } from '@/context/homeContext';
 import { AttachmentPickerView } from './AttachmentPickerView';
 import { SearchView } from './SearchView';
 import { PromptView } from './PromptView';
+import { ProcessingOutline } from './ProcessingOutline';
 
 const SEARCH_BAR_HEIGHT = 52;
 const ACTION_BUTTON_WIDTH = 54;
@@ -60,6 +61,13 @@ export const DynamicBottomBar: React.FC = () => {
     addAttachment,
     performSearch,
     submitAIPrompt,
+    isSearching,
+    isProcessingAI,
+    searchResults,
+    categorizedResults,
+    activeMapCategory,
+    setActiveMapCategory,
+    aiResponse,
     isMapVisible,
     toggleMapVisible,
   } = useHome();
@@ -70,6 +78,137 @@ export const DynamicBottomBar: React.FC = () => {
 
   const searchInputRef = useRef<TextInput>(null);
   const aiInputRef = useRef<TextInput>(null);
+
+  // Dynamic filter pills derived directly from search output headers (food, markets, attractions, hidden_gems, tips)
+  const availableFilterPills = useMemo(() => {
+    const pills: { id: string; label: string }[] = [];
+
+    if (categorizedResults) {
+      if (categorizedResults.food && categorizedResults.food.length > 0) {
+        pills.push({ id: 'food', label: `🍲 Food (${categorizedResults.food.length})` });
+      }
+      if (categorizedResults.markets && categorizedResults.markets.length > 0) {
+        pills.push({ id: 'markets', label: `🛍 Markets (${categorizedResults.markets.length})` });
+      }
+      if (categorizedResults.attractions && categorizedResults.attractions.length > 0) {
+        pills.push({ id: 'attractions', label: `🏛 Attractions (${categorizedResults.attractions.length})` });
+      }
+      if (categorizedResults.hidden_gems && categorizedResults.hidden_gems.length > 0) {
+        pills.push({ id: 'hidden_gems', label: `💎 Hidden Gems (${categorizedResults.hidden_gems.length})` });
+      }
+      if (categorizedResults.tips && categorizedResults.tips.length > 0) {
+        pills.push({ id: 'tips', label: `💡 Tips (${categorizedResults.tips.length})` });
+      }
+      if (pills.length > 1) {
+        pills.unshift({ id: 'all', label: `📍 All Places (${categorizedResults.places.length})` });
+      }
+    } else if (searchResults.length > 0) {
+      pills.push({ id: 'all', label: `📍 All Places (${searchResults.length})` });
+    } else if (aiResponse) {
+      pills.push({ id: 'all', label: `🗺️ Itinerary Places` });
+      if (aiResponse.recommended_places && aiResponse.recommended_places.length > 0) {
+        pills.push({ id: 'food', label: `🍲 Food Spots` });
+        pills.push({ id: 'attractions', label: `📍 Highlights` });
+      }
+      if (aiResponse.tips && aiResponse.tips.length > 0) {
+        pills.push({ id: 'tips', label: `💡 Tips (${aiResponse.tips.length})` });
+      }
+    }
+
+    return pills;
+  }, [categorizedResults, searchResults, aiResponse]);
+
+  // Horizontal coupling physics animations (expansion of active pill, contraction of adjacent pills/map button)
+  const pillHorizontalExpandAnims = useRef<RNAnimated.Value[]>(
+    Array.from({ length: 12 }, () => new RNAnimated.Value(0))
+  ).current;
+  const mapButtonDisplaceAnim = useRef(new RNAnimated.Value(0)).current;
+
+  const handlePillPress = (catId: string, index: number) => {
+    // Horizontal coupling animation:
+    // 1. Tapped pill expands horizontally (+16px)
+    // 2. Left neighbor (or map button if first pill) contracts by (-8px)
+    // 3. Right neighbor contracts by (-8px)
+    const animations: RNAnimated.CompositeAnimation[] = [];
+
+    // Tapped pill expansion spring
+    animations.push(
+      RNAnimated.sequence([
+        RNAnimated.spring(pillHorizontalExpandAnims[index], {
+          toValue: 16,
+          speed: 28,
+          bounciness: 10,
+          useNativeDriver: false,
+        }),
+        RNAnimated.spring(pillHorizontalExpandAnims[index], {
+          toValue: 0,
+          speed: 22,
+          bounciness: 6,
+          useNativeDriver: false,
+        }),
+      ])
+    );
+
+    // Left neighbor or Map button contraction
+    if (index === 0) {
+      animations.push(
+        RNAnimated.sequence([
+          RNAnimated.spring(mapButtonDisplaceAnim, {
+            toValue: -8,
+            speed: 28,
+            bounciness: 10,
+            useNativeDriver: false,
+          }),
+          RNAnimated.spring(mapButtonDisplaceAnim, {
+            toValue: 0,
+            speed: 22,
+            bounciness: 6,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+    } else if (pillHorizontalExpandAnims[index - 1]) {
+      animations.push(
+        RNAnimated.sequence([
+          RNAnimated.spring(pillHorizontalExpandAnims[index - 1], {
+            toValue: -8,
+            speed: 28,
+            bounciness: 10,
+            useNativeDriver: false,
+          }),
+          RNAnimated.spring(pillHorizontalExpandAnims[index - 1], {
+            toValue: 0,
+            speed: 22,
+            bounciness: 6,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+    }
+
+    // Right neighbor contraction
+    if (pillHorizontalExpandAnims[index + 1]) {
+      animations.push(
+        RNAnimated.sequence([
+          RNAnimated.spring(pillHorizontalExpandAnims[index + 1], {
+            toValue: -8,
+            speed: 28,
+            bounciness: 10,
+            useNativeDriver: false,
+          }),
+          RNAnimated.spring(pillHorizontalExpandAnims[index + 1], {
+            toValue: 0,
+            speed: 22,
+            bounciness: 6,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+    }
+
+    RNAnimated.parallel(animations).start();
+    setActiveMapCategory(catId);
+  };
 
   // Screen calculations
   const windowDims = Dimensions.get('window');
@@ -415,13 +554,14 @@ export const DynamicBottomBar: React.FC = () => {
           ]}
           pointerEvents={isExpanded ? 'none' : 'box-none'}
         >
-          {/* Floating Map Toggle Button (Aligned with left edge above action button) */}
+          {/* Floating Map Toggle Button + Category Filter Pills (Aligned above action button) */}
           <View style={styles.floatingToggleRow} pointerEvents="box-none">
             <RNAnimated.View
               style={[
                 styles.floatingToggleButton,
                 {
                   height: dynamicMapButtonHeight,
+                  transform: [{ translateX: mapButtonDisplaceAnim }],
                   backgroundColor: isDark ? '#1F1D1B' : '#FFFFFF',
                   borderColor: isMapVisible ? theme.colors.primary.default : theme.colors.border.default,
                 },
@@ -449,6 +589,65 @@ export const DynamicBottomBar: React.FC = () => {
                 </RNAnimated.View>
               </TouchableOpacity>
             </RNAnimated.View>
+
+            {/* Dynamic Filter Pills beside Map Button (only when Map is active and results exist) */}
+            {isMapVisible && availableFilterPills.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled={true}
+                contentContainerStyle={styles.pillsScrollContainer}
+                style={styles.pillsScrollView}
+              >
+                {availableFilterPills.map((pill: { id: string; label: string }, idx: number) => {
+                  const isActive = activeMapCategory === pill.id;
+                  const expandAnim = pillHorizontalExpandAnims[idx] || new RNAnimated.Value(0);
+
+                  return (
+                    <RNAnimated.View
+                      key={pill.id}
+                      style={{
+                        transform: [
+                          {
+                            scaleX: expandAnim.interpolate({
+                              inputRange: [-8, 0, 16],
+                              outputRange: [0.88, 1, 1.14],
+                            }),
+                          },
+                        ],
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.mapCategoryPill,
+                          {
+                            backgroundColor: isActive
+                              ? (isDark ? '#3D2820' : '#FCEEE8')
+                              : (isDark ? 'rgba(35,32,29,0.95)' : 'rgba(255,255,255,0.95)'),
+                            borderColor: isActive ? theme.colors.primary.default : (isDark ? '#3D3732' : '#E0D6C8'),
+                            borderWidth: isActive ? 1.6 : 1,
+                          },
+                        ]}
+                        onPress={() => handlePillPress(pill.id, idx)}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.mapPillText,
+                            {
+                              color: isActive ? theme.colors.primary.default : theme.colors.text.primary,
+                              fontWeight: isActive ? '700' : '600',
+                            },
+                          ]}
+                        >
+                          {pill.label}
+                        </Text>
+                      </TouchableOpacity>
+                    </RNAnimated.View>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
 
           {/* Main Row: Single GestureDetector wrapping the ENTIRE barRow */}
@@ -502,165 +701,181 @@ export const DynamicBottomBar: React.FC = () => {
 
               {/* ================= RIGHT TEXT BOX (Contracts as Action Button Expands) ================= */}
               <RNAnimated.View
-                style={[
-                  styles.restingTextCard,
-                  {
-                    width: dynamicTextCardWidth,
-                    height: activeMode === 'ai' ? promptBoxHeight : SEARCH_BAR_HEIGHT,
-                    backgroundColor: isDark ? '#1D1B19' : theme.colors.background.surface,
-                    borderColor: activeMode === 'ai' ? theme.colors.primary.default : theme.colors.border.default,
-                    borderWidth: activeMode === 'ai' ? 1.5 : 1,
-                  },
-                ]}
+                style={{
+                  width: dynamicTextCardWidth,
+                }}
               >
-                {/* Top Drag Handle */}
-                <View style={styles.handleContainer} pointerEvents="none">
-                  <View style={[styles.handleBar, { backgroundColor: isDark ? '#4A443F' : '#DED8D1' }]} />
-                </View>
-
-                {/* Resting Content Container */}
-                <RNAnimated.View
-                  style={[
-                    styles.restingContentWrapper,
-                    {
-                      opacity: contentFadeAnim,
-                    },
-                  ]}
+                <ProcessingOutline
+                  isProcessing={activeMode === 'search' ? isSearching : isProcessingAI}
+                  borderRadius={26}
+                  strokeWidth={2.0}
                 >
-                  {activeMode === 'search' ? (
-                    /* ================= SEARCH INPUT FIELD (Default) ================= */
-                    <RNAnimated.View style={[styles.inputRowContent, { opacity: searchModeOpacity }]}>
-                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round">
-                        <Circle cx="11" cy="11" r="8" />
-                        <Line x1="21" y1="21" x2="16.65" y2="16.65" />
-                      </Svg>
+                  <RNAnimated.View
+                    style={[
+                      styles.restingTextCard,
+                      {
+                        width: '100%',
+                        height: activeMode === 'ai' ? promptBoxHeight : SEARCH_BAR_HEIGHT,
+                        backgroundColor: isDark ? '#1D1B19' : theme.colors.background.surface,
+                        borderColor: (activeMode === 'search' ? isSearching : isProcessingAI)
+                          ? 'transparent'
+                          : activeMode === 'ai'
+                          ? theme.colors.primary.default
+                          : theme.colors.border.default,
+                        borderWidth: activeMode === 'ai' ? 1.5 : 1,
+                      },
+                    ]}
+                  >
+                    {/* Top Drag Handle */}
+                    <View style={styles.handleContainer} pointerEvents="none">
+                      <View style={[styles.handleBar, { backgroundColor: isDark ? '#4A443F' : '#DED8D1' }]} />
+                    </View>
 
-                      <TextInput
-                        ref={searchInputRef}
-                        style={[styles.textInput, { color: theme.colors.text.primary }]}
-                        placeholder="Search or swipe up..."
-                        placeholderTextColor={theme.colors.text.muted}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        returnKeyType="search"
-                        onSubmitEditing={handleSearchSubmit}
-                        scrollEnabled={false}
-                        autoCapitalize="words"
-                        selectionColor={theme.colors.primary.default}
-                      />
+                    {/* Resting Content Container */}
+                    <RNAnimated.View
+                      style={[
+                        styles.restingContentWrapper,
+                        {
+                          opacity: contentFadeAnim,
+                        },
+                      ]}
+                    >
+                      {activeMode === 'search' ? (
+                        /* ================= SEARCH INPUT FIELD (Default) ================= */
+                        <RNAnimated.View style={[styles.inputRowContent, { opacity: searchModeOpacity }]}>
+                          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round">
+                            <Circle cx="11" cy="11" r="8" />
+                            <Line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </Svg>
 
-                      {hasSearchText && (
-                        <TouchableOpacity
-                          onPress={clearSearchQuery}
-                          style={styles.clearButton}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Clear search text"
-                        >
-                          <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
-                            <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                          </View>
-                        </TouchableOpacity>
+                          <TextInput
+                            ref={searchInputRef}
+                            style={[styles.textInput, { color: theme.colors.text.primary }]}
+                            placeholder="Search or swipe up..."
+                            placeholderTextColor={theme.colors.text.muted}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            returnKeyType="search"
+                            onSubmitEditing={handleSearchSubmit}
+                            scrollEnabled={false}
+                            autoCapitalize="words"
+                            selectionColor={theme.colors.primary.default}
+                          />
+
+                          {hasSearchText && (
+                            <TouchableOpacity
+                              onPress={clearSearchQuery}
+                              style={styles.clearButton}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              accessibilityLabel="Clear search text"
+                            >
+                              <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
+                                <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
+                              </View>
+                            </TouchableOpacity>
+                          )}
+
+                          <TouchableOpacity
+                            onPress={handleSearchSubmit}
+                            style={[styles.submitIconBtn, { backgroundColor: theme.colors.primary.default }]}
+                            accessibilityLabel="Search"
+                          >
+                            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round">
+                              <Path d="M5 12h14" />
+                              <Path d="m12 5 7 7-7 7" />
+                            </Svg>
+                          </TouchableOpacity>
+                        </RNAnimated.View>
+                      ) : (
+                        /* ================= PROMPT INPUT FIELD ================= */
+                        <RNAnimated.View style={[styles.inputRowContent, { opacity: aiModeOpacity }]}>
+                          {/* '+' Attachment Button */}
+                          <TouchableOpacity
+                            style={[styles.plusButton, { backgroundColor: isDark ? '#2B2824' : '#EFE8DE' }]}
+                            activeOpacity={0.7}
+                            onPress={handleOpenAttachmentPicker}
+                            accessibilityRole="button"
+                            accessibilityLabel="Add attachment"
+                          >
+                            <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary.default} strokeWidth="2.6" strokeLinecap="round">
+                              <Line x1="12" y1="5" x2="12" y2="19" />
+                              <Line x1="5" y1="12" x2="19" y2="12" />
+                            </Svg>
+                          </TouchableOpacity>
+
+                          {/* Multiline Prompt TextInput */}
+                          <TextInput
+                            ref={aiInputRef}
+                            style={[styles.textInput, { color: theme.colors.text.primary }]}
+                            placeholder="Ask Ghumo AI or swipe up..."
+                            placeholderTextColor={theme.colors.text.muted}
+                            value={aiPrompt}
+                            maxLength={MAX_PROMPT_LENGTH}
+                            onChangeText={(text) => {
+                              const trimmed = text.slice(0, MAX_PROMPT_LENGTH);
+                              setAiPrompt(trimmed);
+                              if (!trimmed || trimmed.trim().length === 0) {
+                                setPromptBoxHeight(SEARCH_BAR_HEIGHT);
+                              }
+                            }}
+                            onContentSizeChange={(e) => {
+                              const contentHeight = e?.nativeEvent?.contentSize?.height || 0;
+                              if (!aiPrompt || aiPrompt.trim().length === 0) {
+                                setPromptBoxHeight(SEARCH_BAR_HEIGHT);
+                              } else {
+                                const calculatedHeight = Math.max(SEARCH_BAR_HEIGHT, Math.ceil(contentHeight + 20));
+                                setPromptBoxHeight(calculatedHeight);
+                              }
+                            }}
+                            multiline={true}
+                            scrollEnabled={false}
+                            autoCapitalize="sentences"
+                            blurOnSubmit={false}
+                            selectionColor={theme.colors.primary.default}
+                          />
+
+                          {/* Clear '✕' button */}
+                          {hasPromptText && (
+                            <TouchableOpacity
+                              onPress={() => {
+                                clearAiPrompt();
+                                setPromptBoxHeight(SEARCH_BAR_HEIGHT);
+                              }}
+                              style={styles.clearButton}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              accessibilityLabel="Clear prompt text"
+                            >
+                              <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
+                                <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
+                              </View>
+                            </TouchableOpacity>
+                          )}
+
+                          {/* Send Button with Paper Plane Icon (Embedded Inside Text Box) */}
+                          <TouchableOpacity
+                            onPress={handlePromptSubmit}
+                            disabled={!hasPromptText}
+                            style={[
+                              styles.paperPlaneButton,
+                              {
+                                backgroundColor: hasPromptText ? theme.colors.primary.default : (isDark ? '#2D2925' : '#E8E2D8'),
+                                opacity: hasPromptText ? 1 : 0.6,
+                              },
+                            ]}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Send AI prompt"
+                          >
+                            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={hasPromptText ? '#FFFFFF' : theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <Path d="M22 2L11 13" />
+                              <Path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                            </Svg>
+                          </TouchableOpacity>
+                        </RNAnimated.View>
                       )}
-
-                      <TouchableOpacity
-                        onPress={handleSearchSubmit}
-                        style={[styles.submitIconBtn, { backgroundColor: theme.colors.primary.default }]}
-                        accessibilityLabel="Search"
-                      >
-                        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round">
-                          <Path d="M5 12h14" />
-                          <Path d="m12 5 7 7-7 7" />
-                        </Svg>
-                      </TouchableOpacity>
                     </RNAnimated.View>
-                  ) : (
-                    /* ================= PROMPT INPUT FIELD ================= */
-                    <RNAnimated.View style={[styles.inputRowContent, { opacity: aiModeOpacity }]}>
-                      {/* '+' Attachment Button */}
-                      <TouchableOpacity
-                        style={[styles.plusButton, { backgroundColor: isDark ? '#2B2824' : '#EFE8DE' }]}
-                        activeOpacity={0.7}
-                        onPress={handleOpenAttachmentPicker}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add attachment"
-                      >
-                        <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary.default} strokeWidth="2.6" strokeLinecap="round">
-                          <Line x1="12" y1="5" x2="12" y2="19" />
-                          <Line x1="5" y1="12" x2="19" y2="12" />
-                        </Svg>
-                      </TouchableOpacity>
-
-                      {/* Multiline Prompt TextInput */}
-                      <TextInput
-                        ref={aiInputRef}
-                        style={[styles.textInput, { color: theme.colors.text.primary }]}
-                        placeholder="Ask Ghumo AI or swipe up..."
-                        placeholderTextColor={theme.colors.text.muted}
-                        value={aiPrompt}
-                        maxLength={MAX_PROMPT_LENGTH}
-                        onChangeText={(text) => {
-                          const trimmed = text.slice(0, MAX_PROMPT_LENGTH);
-                          setAiPrompt(trimmed);
-                          if (!trimmed || trimmed.trim().length === 0) {
-                            setPromptBoxHeight(SEARCH_BAR_HEIGHT);
-                          }
-                        }}
-                        onContentSizeChange={(e) => {
-                          const contentHeight = e?.nativeEvent?.contentSize?.height || 0;
-                          if (!aiPrompt || aiPrompt.trim().length === 0) {
-                            setPromptBoxHeight(SEARCH_BAR_HEIGHT);
-                          } else {
-                            const calculatedHeight = Math.max(SEARCH_BAR_HEIGHT, Math.ceil(contentHeight + 20));
-                            setPromptBoxHeight(calculatedHeight);
-                          }
-                        }}
-                        multiline={true}
-                        scrollEnabled={false}
-                        autoCapitalize="sentences"
-                        blurOnSubmit={false}
-                        selectionColor={theme.colors.primary.default}
-                      />
-
-                      {/* Clear '✕' button */}
-                      {hasPromptText && (
-                        <TouchableOpacity
-                          onPress={() => {
-                            clearAiPrompt();
-                            setPromptBoxHeight(SEARCH_BAR_HEIGHT);
-                          }}
-                          style={styles.clearButton}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Clear prompt text"
-                        >
-                          <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
-                            <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
-
-                      {/* Send Button with Paper Plane Icon (Embedded Inside Text Box) */}
-                      <TouchableOpacity
-                        onPress={handlePromptSubmit}
-                        disabled={!hasPromptText}
-                        style={[
-                          styles.paperPlaneButton,
-                          {
-                            backgroundColor: hasPromptText ? theme.colors.primary.default : (isDark ? '#2D2925' : '#E8E2D8'),
-                            opacity: hasPromptText ? 1 : 0.6,
-                          },
-                        ]}
-                        activeOpacity={0.8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Send AI prompt"
-                      >
-                        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={hasPromptText ? '#FFFFFF' : theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <Path d="M22 2L11 13" />
-                          <Path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                        </Svg>
-                      </TouchableOpacity>
-                    </RNAnimated.View>
-                  )}
-                </RNAnimated.View>
+                  </RNAnimated.View>
+                </ProcessingOutline>
               </RNAnimated.View>
             </View>
           </GestureDetector>
@@ -742,6 +957,32 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 2,
     zIndex: 95,
+    gap: 8,
+  },
+  pillsScrollView: {
+    flex: 1,
+    marginLeft: 4,
+  },
+  pillsScrollContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 8,
+  },
+  mapCategoryPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapPillText: {
+    fontSize: 12.5,
+    fontWeight: '700',
   },
   floatingToggleButton: {
     width: MAP_BUTTON_SIZE,

@@ -20,7 +20,7 @@ import { MapBackground } from '@/components/home/MapBackground';
 import { GhumoCenterBrand } from '@/components/home/GhumoCenterBrand';
 import { HomeTopBar } from '@/components/home/HomeTopBar';
 import { DynamicBottomBar } from '@/components/home/DynamicBottomBar';
-import { HomeFeedResults } from '@/components/home/HomeFeedResults';
+import { MapPlaceCarousel } from '@/components/home/MapPlaceCarousel';
 
 export default function HomeScreen() {
   const { isAuthenticated, isGuest } = useAuth();
@@ -86,10 +86,10 @@ export default function HomeScreen() {
       {/* Layer 2: Floating Top App Bar */}
       <HomeTopBar />
 
-      {/* Layer 3: Search & AI Results Card (when active) */}
-      <HomeFeedResults />
+      {/* Layer 3: Downward-gravity Map Place Carousel (when results active on map) */}
+      <MapPlaceCarousel />
 
-      {/* Layer 4: Dynamic Morphing Bottom Bar (AI + Search + Floating Map Toggle) */}
+      {/* Layer 4: Dynamic Morphing Bottom Bar (AI + Search + Floating Map Toggle + Category Pills) */}
       <DynamicBottomBar />
 
       {/* Layer 5: Auth Action Loading Overlay */}

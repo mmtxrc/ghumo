@@ -203,12 +203,15 @@ export const MapBackground: React.FC = () => {
         boundsPoints.push([data.userLocation.latitude, data.userLocation.longitude]);
       }
 
+      var selectedMarker = null;
+
       if (data.pins && data.pins.length > 0) {
         data.pins.forEach(function(pin) {
           boundsPoints.push([pin.lat, pin.lng]);
+          var isSelected = data.selectedPlaceId === pin.id;
           var pinIcon = L.divIcon({
             className: '',
-            html: '<div class="place-pin-marker">📍 ' + pin.name + '</div>',
+            html: '<div class="place-pin-marker' + (isSelected ? ' selected-pin' : '') + '">📍 ' + pin.name + '</div>',
             iconSize: [null, 24],
             iconAnchor: [30, 12]
           });
@@ -222,11 +225,31 @@ export const MapBackground: React.FC = () => {
             .addTo(map)
             .bindPopup(popupContent, { className: 'custom-popup' });
 
+          if (isSelected) {
+            selectedMarker = marker;
+          }
+
           placeMarkers.push(marker);
         });
       }
 
-      if (boundsPoints.length > 1) {
+      // Camera centering & zoom behavior:
+      // 1. If a place on the carousel is clicked/selected -> smoothly pan and zoom in to zoom level 16
+      // 2. If cross clicked (selectedPlaceId is null) -> smoothly pan and zoom back to user's current location
+      if (data.selectedPlaceId && data.pins && data.pins.length > 0) {
+        var activePin = data.pins.find(function(p) { return p.id === data.selectedPlaceId; });
+        if (activePin) {
+          map.setView([activePin.lat, activePin.lng], 16, { animate: true });
+          if (selectedMarker) {
+            selectedMarker.openPopup();
+          }
+        }
+      } else if (data.userLocation) {
+        map.setView([data.userLocation.latitude, data.userLocation.longitude], 15, { animate: true });
+        if (userMarker) {
+          userMarker.openPopup();
+        }
+      } else if (boundsPoints.length > 1) {
         map.fitBounds(boundsPoints, { padding: [50, 50], maxZoom: 15 });
       } else if (boundsPoints.length === 1) {
         map.setView(boundsPoints[0], 14, { animate: true });

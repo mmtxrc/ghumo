@@ -11,11 +11,13 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { ScrollView, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
+import { ProcessingOutline } from './ProcessingOutline';
 import { SAMPLE_PLACES, SAMPLE_ITINERARIES, querySamplePlaces } from '@/data/sampleDatasets';
 
 const QUICK_CATEGORIES = [
@@ -39,6 +41,9 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
     clearSearchQuery,
     performSearch,
     searchResults,
+    categorizedResults,
+    searchHistory,
+    isSearching,
     setActiveMode,
     setAiPrompt,
     submitAIPrompt,
@@ -58,6 +63,8 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
     setAiPrompt(item.summary);
     submitAIPrompt(item.summary);
   };
+
+  const hasProcessedSearch = searchResults.length > 0 || Boolean(categorizedResults);
 
   // Header Zone 1 (Title, Close button, Search box)
   const headerContent = (
@@ -79,45 +86,49 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
         </TouchableOpacity>
       </View>
 
-      {/* Embedded Search Input Field */}
-      <View
-        style={[
-          styles.searchInputWrapper,
-          {
-            backgroundColor: isDark ? '#25221F' : '#F6F1E9',
-            borderColor: theme.colors.border.default,
-          },
-        ]}
-      >
-        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round">
-          <Circle cx="11" cy="11" r="8" />
-          <Line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </Svg>
-
-        <TextInput
-          ref={searchInputRef}
-          style={[styles.textInput, { color: theme.colors.text.primary }]}
-          placeholder="Search destinations, forts, cafes..."
-          placeholderTextColor={theme.colors.text.muted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-          onSubmitEditing={handleSearchSubmit}
-          autoCapitalize="words"
-          selectionColor={theme.colors.primary.default}
-        />
-
-        {searchQuery.trim().length > 0 && (
-          <TouchableOpacity
-            onPress={clearSearchQuery}
-            style={styles.clearBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      {/* Embedded Search Input Field with Rotating Accent Outline */}
+      <View style={styles.searchInputContainer}>
+        <ProcessingOutline isProcessing={isSearching} borderRadius={24} strokeWidth={2.0}>
+          <View
+            style={[
+              styles.searchInputWrapper,
+              {
+                backgroundColor: isDark ? '#25221F' : '#F6F1E9',
+                borderColor: isSearching ? 'transparent' : theme.colors.border.default,
+              },
+            ]}
           >
-            <View style={[styles.clearBadge, { backgroundColor: isDark ? '#3A3530' : '#E2DCD2' }]}>
-              <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round">
+              <Circle cx="11" cy="11" r="8" />
+              <Line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </Svg>
+
+            <TextInput
+              ref={searchInputRef}
+              style={[styles.textInput, { color: theme.colors.text.primary }]}
+              placeholder="Search destinations, forts, cafes..."
+              placeholderTextColor={theme.colors.text.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              onSubmitEditing={handleSearchSubmit}
+              autoCapitalize="words"
+              selectionColor={theme.colors.primary.default}
+            />
+
+            {searchQuery.trim().length > 0 && (
+              <TouchableOpacity
+                onPress={clearSearchQuery}
+                style={styles.clearBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <View style={[styles.clearBadge, { backgroundColor: isDark ? '#3A3530' : '#E2DCD2' }]}>
+                  <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ProcessingOutline>
       </View>
     </View>
   );
@@ -133,42 +144,44 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
         headerContent
       )}
 
-      {/* Zone 2: Horizontal Quick Category Chips */}
-      <View style={styles.categorySection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          nestedScrollEnabled={true}
-          keyboardShouldPersistTaps="handled"
-          scrollEventThrottle={16}
-          directionalLockEnabled={true}
-          contentContainerStyle={styles.categoryContainer}
-        >
-          {QUICK_CATEGORIES.map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
-              style={[
-                styles.categoryChip,
-                {
-                  backgroundColor: isDark ? '#2A2623' : '#F3ECE1',
-                  borderColor: isDark ? '#3D3732' : '#E5DDD1',
-                },
-              ]}
-              onPress={() => {
-                setSearchQuery(cat.query);
-                performSearch(cat.query);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.categoryText, { color: theme.colors.text.primary }]}>
-                {cat.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Zone 2: Horizontal Quick Category Chips (ONLY WHEN NO SEARCH IS PROCESSED - DEFAULT VIEW) */}
+      {!hasProcessedSearch && (
+        <View style={styles.categorySection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+            scrollEventThrottle={16}
+            directionalLockEnabled={true}
+            contentContainerStyle={styles.categoryContainer}
+          >
+            {QUICK_CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.categoryChip,
+                  {
+                    backgroundColor: isDark ? '#2A2623' : '#F3ECE1',
+                    borderColor: isDark ? '#3D3732' : '#E5DDD1',
+                  },
+                ]}
+                onPress={() => {
+                  setSearchQuery(cat.query);
+                  performSearch(cat.query);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.categoryText, { color: theme.colors.text.primary }]}>
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
-      {/* Zone 3: Main Scrollable Content (Travel Inspirations + Search Results) */}
+      {/* Zone 3: Main Scrollable Content */}
       <ScrollView
         style={styles.contentScroll}
         contentContainerStyle={[styles.contentInner, { flexGrow: 1 }]}
@@ -180,8 +193,44 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
         bounces={true}
         overScrollMode="always"
       >
+        {/* Search History (Last 5 terms - Enlisted below pills when in default view) */}
+        {!hasProcessedSearch && searchHistory.length > 0 && (
+          <View style={styles.historySection}>
+            <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+              🕐 Recent Searches
+            </Text>
+            <View style={styles.historyList}>
+              {searchHistory.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.historyItem,
+                    {
+                      backgroundColor: isDark ? '#24211E' : '#FAF6EE',
+                      borderColor: isDark ? '#36312C' : '#E8E1D5',
+                    },
+                  ]}
+                  onPress={() => {
+                    setSearchQuery(item);
+                    performSearch(item);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.historyIcon}>🔍</Text>
+                  <Text style={[styles.historyText, { color: theme.colors.text.primary }]} numberOfLines={1}>
+                    {item}
+                  </Text>
+                  <Text style={[styles.historyActionText, { color: theme.colors.primary.default }]}>
+                    Search →
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* Live Search Results if Available */}
-        {searchResults.length > 0 ? (
+        {hasProcessedSearch ? (
           <View style={styles.resultsSection}>
             <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
               Search Results ({searchResults.length})
@@ -200,7 +249,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
               >
                 <View style={styles.resultHeader}>
                   <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
-                    📍 {place.name}
+                    {place.type === 'food' ? '🍲' : place.type === 'market' ? '🛍' : '📍'} {place.name}
                   </Text>
                   {place.rating && (
                     <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
@@ -213,9 +262,23 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                     {place.category}
                   </Text>
                 )}
-                {place.description && (
+                {place.vibe && (
+                  <Text style={[styles.vibeText, { color: theme.colors.primary.default }]}>
+                    ✨ Vibe: {place.vibe}
+                  </Text>
+                )}
+                {place.reason ? (
+                  <Text style={[styles.placeDesc, { color: theme.colors.text.secondary }]}>
+                    {place.reason}
+                  </Text>
+                ) : place.description ? (
                   <Text style={[styles.placeDesc, { color: theme.colors.text.muted }]}>
                     {place.description}
+                  </Text>
+                ) : null}
+                {place.must_try_cuisine && (
+                  <Text style={[styles.placeDesc, { color: theme.colors.primary.default }]}>
+                    🍽️ Must-Try: {place.must_try_cuisine}
                   </Text>
                 )}
                 {(place.ticket_price || place.timings) && (
@@ -385,10 +448,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  searchInputContainer: {
+    marginHorizontal: 16,
+  },
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 16,
     paddingHorizontal: 14,
     height: 48,
     borderRadius: 24,
@@ -577,5 +642,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 6,
     lineHeight: 16,
+  },
+  vibeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  historySection: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  historyList: {
+    gap: 8,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  historyIcon: {
+    fontSize: 14,
+  },
+  historyText: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: '500',
+  },
+  historyActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  loadingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+    marginBottom: 8,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
   },
 });

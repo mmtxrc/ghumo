@@ -12,12 +12,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { ScrollView, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Path, Line } from 'react-native-svg';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 import { AttachmentPickerModal } from './AttachmentPickerModal';
+import { ProcessingOutline } from './ProcessingOutline';
 import { SAMPLE_ITINERARIES } from '@/data/sampleDatasets';
 
 const STARTER_PROMPTS = [
@@ -40,12 +42,14 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
     submitAIPrompt,
     aiResponse,
     isProcessingAI,
+    promptHistory,
     attachments,
     removeAttachment,
     clearAiPrompt,
   } = useHome();
 
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
+  const [selectedHistoryPrompt, setSelectedHistoryPrompt] = useState<string | null>(null);
   const promptInputRef = useRef<TextInput>(null);
 
   const handleSubmit = () => {
@@ -74,74 +78,78 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
         </TouchableOpacity>
       </View>
 
-      {/* Embedded Dynamic Prompt Input Field */}
-      <View
-        style={[
-          styles.promptInputWrapper,
-          {
-            backgroundColor: isDark ? '#25221F' : '#F6F1E9',
-            borderColor: theme.colors.primary.default,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={[styles.plusButton, { backgroundColor: isDark ? '#2E2B27' : '#EBE4D8' }]}
-          activeOpacity={0.7}
-          onPress={() => setAttachmentModalVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Add attachment or media"
-        >
-          <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary.default} strokeWidth="2.5" strokeLinecap="round">
-            <Line x1="12" y1="5" x2="12" y2="19" />
-            <Line x1="5" y1="12" x2="19" y2="12" />
-          </Svg>
-        </TouchableOpacity>
-
-        <TextInput
-          ref={promptInputRef}
-          style={[styles.textInput, { color: theme.colors.text.primary }]}
-          placeholder="Ask Ghumo AI to plan a trip, itinerary, or cafe list..."
-          placeholderTextColor={theme.colors.text.muted}
-          value={aiPrompt}
-          onChangeText={setAiPrompt}
-          multiline
-          scrollEnabled={false}
-          autoCapitalize="sentences"
-          selectionColor={theme.colors.primary.default}
-        />
-
-        {aiPrompt.trim().length > 0 && (
-          <TouchableOpacity
-            onPress={clearAiPrompt}
-            style={styles.clearBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      {/* Embedded Dynamic Prompt Input Field with Rotating Accent Outline */}
+      <View style={styles.promptInputContainer}>
+        <ProcessingOutline isProcessing={isProcessingAI} borderRadius={25} strokeWidth={2.0}>
+          <View
+            style={[
+              styles.promptInputWrapper,
+              {
+                backgroundColor: isDark ? '#25221F' : '#F6F1E9',
+                borderColor: isProcessingAI ? 'transparent' : theme.colors.primary.default,
+              },
+            ]}
           >
-            <View style={[styles.clearBadge, { backgroundColor: isDark ? '#3A3530' : '#E2DCD2' }]}>
-              <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+            <TouchableOpacity
+              style={[styles.plusButton, { backgroundColor: isDark ? '#2E2B27' : '#EBE4D8' }]}
+              activeOpacity={0.7}
+              onPress={() => setAttachmentModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Add attachment or media"
+            >
+              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary.default} strokeWidth="2.5" strokeLinecap="round">
+                <Line x1="12" y1="5" x2="12" y2="19" />
+                <Line x1="5" y1="12" x2="19" y2="12" />
+              </Svg>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.sendBtn,
-            {
-              backgroundColor: aiPrompt.trim().length > 0 ? theme.colors.primary.default : (isDark ? '#35312D' : '#DED8CE'),
-            },
-          ]}
-          onPress={handleSubmit}
-          disabled={!aiPrompt.trim() || isProcessingAI}
-          activeOpacity={0.8}
-        >
-          {isProcessingAI ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <Path d="M5 12h14" />
-              <Path d="m12 5 7 7-7 7" />
-            </Svg>
-          )}
-        </TouchableOpacity>
+            <TextInput
+              ref={promptInputRef}
+              style={[styles.textInput, { color: theme.colors.text.primary }]}
+              placeholder="Ask Ghumo AI to plan a trip, itinerary, or cafe list..."
+              placeholderTextColor={theme.colors.text.muted}
+              value={aiPrompt}
+              onChangeText={setAiPrompt}
+              multiline
+              scrollEnabled={false}
+              autoCapitalize="sentences"
+              selectionColor={theme.colors.primary.default}
+            />
+
+            {aiPrompt.trim().length > 0 && (
+              <TouchableOpacity
+                onPress={clearAiPrompt}
+                style={styles.clearBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <View style={[styles.clearBadge, { backgroundColor: isDark ? '#3A3530' : '#E2DCD2' }]}>
+                  <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.sendBtn,
+                {
+                  backgroundColor: aiPrompt.trim().length > 0 ? theme.colors.primary.default : (isDark ? '#35312D' : '#DED8CE'),
+                },
+              ]}
+              onPress={handleSubmit}
+              disabled={!aiPrompt.trim() || isProcessingAI}
+              activeOpacity={0.8}
+            >
+              {isProcessingAI ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M5 12h14" />
+                  <Path d="m12 5 7 7-7 7" />
+                </Svg>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ProcessingOutline>
       </View>
 
       {/* Active Attachments list if present */}
@@ -194,6 +202,50 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
             <Text style={[styles.loadingText, { color: theme.colors.text.primary }]}>
               Ghumo AI is curating your personalized travel itinerary...
             </Text>
+          </View>
+        )}
+
+        {/* Recent AI Prompts (Last 5 history items in one line - Press & Hold to preview full, Tap to execute) */}
+        {!aiResponse && promptHistory && promptHistory.length > 0 && (
+          <View style={styles.historySection}>
+            <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+              🕐 Recent Prompts
+            </Text>
+            <View style={styles.historyList}>
+              {promptHistory.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.historyItem,
+                    {
+                      backgroundColor: isDark ? '#24211E' : '#FAF6EE',
+                      borderColor: isDark ? '#36312C' : '#E8E1D5',
+                    },
+                  ]}
+                  onPress={() => {
+                    setAiPrompt(item);
+                    submitAIPrompt(item);
+                  }}
+                  onLongPress={() => {
+                    setSelectedHistoryPrompt(item);
+                  }}
+                  delayLongPress={350}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.historyIcon}>✨</Text>
+                  <Text
+                    style={[styles.historyText, { color: theme.colors.text.primary }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {item}
+                  </Text>
+                  <Text style={[styles.historyActionText, { color: theme.colors.primary.default }]}>
+                    Go →
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
 
@@ -278,7 +330,8 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
                         <Text style={[styles.placeDescription, { color: theme.colors.text.secondary }]}>
                           {p.description || p.purpose}
                         </Text>
-                      )}</View>
+                      )}
+                    </View>
                   </View>
                 ))}
               </View>
@@ -331,6 +384,70 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
         )}
       </ScrollView>
 
+      {/* Full Prompt Preview Modal on Long Press */}
+      <Modal
+        visible={Boolean(selectedHistoryPrompt)}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSelectedHistoryPrompt(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: isDark ? '#23201C' : '#FFFFFF',
+                borderColor: theme.colors.border.default,
+              },
+            ]}
+          >
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, { color: theme.colors.primary.default }]}>
+                ✨ Full AI Prompt
+              </Text>
+              <TouchableOpacity
+                onPress={() => setSelectedHistoryPrompt(null)}
+                style={[styles.modalCloseBtn, { backgroundColor: isDark ? '#302B26' : '#ECE5DA' }]}
+              >
+                <Text style={[styles.modalCloseText, { color: theme.colors.text.secondary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={true}>
+              <Text style={[styles.modalBodyText, { color: theme.colors.text.primary }]}>
+                {selectedHistoryPrompt}
+              </Text>
+            </ScrollView>
+
+            <View style={styles.modalFooterRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: theme.colors.border.default }]}
+                onPress={() => setSelectedHistoryPrompt(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelText, { color: theme.colors.text.secondary }]}>
+                  Close
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSubmitBtn, { backgroundColor: theme.colors.primary.default }]}
+                onPress={() => {
+                  if (selectedHistoryPrompt) {
+                    const p = selectedHistoryPrompt;
+                    setSelectedHistoryPrompt(null);
+                    setAiPrompt(p);
+                    submitAIPrompt(p);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalSubmitText}>Hit Go ✨</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Attachment Picker Modal */}
       <AttachmentPickerModal
         visible={attachmentModalVisible}
@@ -377,10 +494,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  promptInputContainer: {
+    marginHorizontal: 16,
+  },
   promptInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
     minHeight: 50,
@@ -468,6 +587,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     flex: 1,
+  },
+  historySection: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  historyList: {
+    gap: 8,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  historyIcon: {
+    fontSize: 14,
+  },
+  historyText: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: '500',
+  },
+  historyActionText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   starterSection: {
     gap: 8,
@@ -597,5 +744,79 @@ const styles = StyleSheet.create({
   tipItem: {
     fontSize: 12,
     lineHeight: 17,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '75%',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalBodyScroll: {
+    maxHeight: 280,
+    marginVertical: 8,
+  },
+  modalBodyText: {
+    fontSize: 14.5,
+    lineHeight: 22,
+  },
+  modalFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 14,
+  },
+  modalCancelBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalSubmitBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 9999,
+  },
+  modalSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
