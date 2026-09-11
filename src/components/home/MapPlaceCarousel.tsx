@@ -284,7 +284,23 @@ export const MapPlaceCarousel: React.FC = () => {
     }
   }, [selectedDayIndex]);
 
-  // Center carousel when selectedPlaceId changes (e.g. from map pin tap or day switch)
+  // When search places or category changes, ensure selected place is focused & centered
+  useEffect(() => {
+    if (!aiResponse && filteredSearchPlaces.length > 0) {
+      const currentSelected = filteredSearchPlaces.find((p) => p.id === selectedPlaceId);
+      if (!currentSelected) {
+        setSelectedPlaceId(filteredSearchPlaces[0].id);
+        scrollToCardIndex(0, filteredSearchPlaces[0].id);
+      } else {
+        const idx = filteredSearchPlaces.indexOf(currentSelected);
+        if (idx >= 0) {
+          scrollToCardIndex(idx, currentSelected.id);
+        }
+      }
+    }
+  }, [activeMapCategory, filteredSearchPlaces.length]);
+
+  // Center carousel when selectedPlaceId changes (e.g. from map pin tap, list click, or card press)
   useEffect(() => {
     if (!selectedPlaceId) return;
     if (lastScrolledIdRef.current === selectedPlaceId) return;
@@ -802,6 +818,7 @@ export const MapPlaceCarousel: React.FC = () => {
         ) : filteredSearchPlaces.length > 0 ? (
           /* ================= SEARCH RESULTS CAROUSEL ================= */
           <ScrollView
+            ref={placesScrollViewRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             nestedScrollEnabled={true}

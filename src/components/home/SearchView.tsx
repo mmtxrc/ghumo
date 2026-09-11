@@ -56,6 +56,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
     setActiveMode,
     setAiPrompt,
     submitAIPrompt,
+    setSelectedPlaceId,
   } = useHome();
 
   const searchInputRef = useRef<TextInput>(null);
@@ -232,6 +233,10 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                   },
                 ]}
                 activeOpacity={0.7}
+                onPress={() => {
+                  setSelectedPlaceId(place.id);
+                  onClose();
+                }}
               >
                 <View style={styles.resultHeader}>
                   <View style={styles.titleWithIcon}>
