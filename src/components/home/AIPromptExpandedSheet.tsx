@@ -59,7 +59,7 @@ export const AIPromptExpandedSheet: React.FC = () => {
       {/* Header Row */}
       <View style={styles.headerRow}>
         <View style={styles.titleWithIcon}>
-          <Ionicons name="sparkles" size={16} color={theme.colors.primary.default} />
+          <Ionicons name="sparkles-outline" size={16} color={theme.colors.primary.default} />
           <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>
             Ghumo AI Travel Planner
           </Text>

@@ -292,7 +292,7 @@ export const HomeFeedResults: React.FC = () => {
         {aiResponse && (
           <View style={styles.itinerarySection}>
             <View style={styles.inlineRow}>
-              <Ionicons name="sparkles" size={16} color={theme.colors.primary.default} />
+              <Ionicons name="sparkles-outline" size={16} color={theme.colors.primary.default} />
               <Text style={[styles.itineraryTitle, { color: theme.colors.primary.default }]}>
                 {aiResponse.title}
               </Text>

@@ -93,7 +93,7 @@ export const HomeTopBar: React.FC = () => {
             </Text>
           </View>
 
-          {/* Right Island: Breadcrumb / Menu Trigger Button (Single clean circle) */}
+          {/* Right Island: Menu Trigger Button (Single clean outer circle, no inner circle) */}
           <TouchableOpacity
             style={[
               styles.rightIsland,
@@ -108,7 +108,7 @@ export const HomeTopBar: React.FC = () => {
             accessibilityRole="button"
             accessibilityLabel="Open settings menu"
           >
-            <Feather name="more-horizontal" size={22} color={theme.colors.text.primary} />
+            <Feather name="more-horizontal" size={20} color={theme.colors.text.primary} />
           </TouchableOpacity>
         </View>
       </View>

@@ -292,6 +292,12 @@ export const MapBackground: React.FC = () => {
             .addTo(map)
             .bindPopup(popupContent, { className: 'custom-popup' });
 
+          marker.on('click', function() {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SELECT_PLACE', id: pin.id }));
+            }
+          });
+
           if (isSelected) {
             selectedMarker = marker;
           }
@@ -301,13 +307,13 @@ export const MapBackground: React.FC = () => {
       }
 
       // Camera centering & zoom behavior:
-      // 1. If a place on the carousel is clicked/selected -> smoothly pan and zoom in to zoom level 15
+      // 1. If a place on the carousel is clicked/selected -> smoothly fly to that place and open its popup
       // 2. If pins exist without a specific selected pin -> frame all place pins
       // 3. If no search/itinerary pins exist -> smoothly pan back to user's current location
       if (data.selectedPlaceId && data.pins && data.pins.length > 0) {
         var activePin = data.pins.find(function(p) { return p.id === data.selectedPlaceId; });
         if (activePin) {
-          map.setView([activePin.lat, activePin.lng], 15, { animate: true });
+          map.flyTo([activePin.lat, activePin.lng], 16, { animate: true, duration: 0.8 });
           if (selectedMarker) {
             selectedMarker.openPopup();
           }
@@ -334,12 +340,24 @@ export const MapBackground: React.FC = () => {
 </html>
   `;
 
+  const handleMapMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'SELECT_PLACE' && data.id) {
+        setSelectedPlaceId(data.id);
+      }
+    } catch {
+      // Ignore invalid JSON
+    }
+  };
+
   return (
     <View style={[StyleSheet.absoluteFill, styles.container]} pointerEvents="auto">
       <WebView
         ref={webViewRef}
         originWhitelist={['*']}
         source={{ html: htmlContent }}
+        onMessage={handleMapMessage}
         style={StyleSheet.absoluteFill}
         scrollEnabled={false}
         overScrollMode="never"

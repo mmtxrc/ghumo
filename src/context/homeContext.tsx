@@ -6,6 +6,7 @@ import { AttachmentItem, AIPromptResponse, IAIService } from '@/domain/models/ai
 import { defaultSearchService } from '@/data/services/searchService';
 import { defaultAIService } from '@/data/services/aiService';
 import { cacheService } from '@/data/services/cacheService';
+import { contributionService } from '@/data/services/contributionService';
 import { logger } from '@/utils/logger';
 
 export type HomeInteractionMode = 'search' | 'ai';
@@ -70,6 +71,7 @@ interface HomeContextType {
   performSearch: (query?: string, forceRefresh?: boolean) => Promise<void>;
   submitAIPrompt: (prompt?: string, forceRefresh?: boolean) => Promise<void>;
   submitPlaceRating: (targetId: string, rating: number, targetType?: 'place' | 'itinerary') => Promise<void>;
+  userRatings: Record<string, number>;
   isUsingCachedResult: boolean;
   refetchCurrentResults: () => Promise<void>;
   clearResults: () => void;
@@ -128,9 +130,19 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [isMapVisible, setIsMapVisible] = useState<boolean>(true);
+  const [userRatings, setUserRatings] = useState<Record<string, number>>({});
 
   const [navigationStack, setNavigationStack] = useState<NavigationHistoryEntry[]>([]);
   const [showExitModal, setShowExitModal] = useState<boolean>(false);
+
+  // Load persistent user contributions / ratings from local storage
+  useEffect(() => {
+    contributionService.getUserRatingsMap().then((ratings) => {
+      if (ratings && Object.keys(ratings).length > 0) {
+        setUserRatings(ratings);
+      }
+    });
+  }, []);
 
   const [isUsingCachedResult, setIsUsingCachedResult] = useState<boolean>(false);
   const lastExecutedQuery = useRef<string>('');
@@ -156,7 +168,7 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     });
   };
 
-  const restoreNavigationEntry = useCallback((targetState: NavigationHistoryEntry) => {
+  const restoreStackEntry = useCallback((targetState: NavigationHistoryEntry) => {
     if (targetState.type === 'search') {
       setActiveMode('search');
       setSearchQuery(targetState.queryOrPrompt);
@@ -195,28 +207,28 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       return true;
     }
 
-    const isResultActive = searchResults.length > 0 || aiResponse !== null;
+    const hasActiveResults = searchResults.length > 0 || aiResponse !== null;
 
-    // 3. If no carousel/results are actively visible, but stack has history (e.g. user closed carousel via '✕')
-    // Pressing back restores that last closed carousel entry first
-    if (!isResultActive && navigationStack.length > 0) {
-      const targetState = navigationStack[navigationStack.length - 1];
-      restoreNavigationEntry(targetState);
+    // 3. If carousel was closed (via '✕') but we have items in navigationStack,
+    // restore the top/last entry so back takes the user back to this entry
+    if (!hasActiveResults && navigationStack.length > 0) {
+      const lastEntry = navigationStack[navigationStack.length - 1];
+      restoreStackEntry(lastEntry);
       return true;
     }
 
-    // 4. If a carousel is currently visible and we have multiple history items, step back to the previous entry
-    if (isResultActive && navigationStack.length > 1) {
+    // 4. If there is navigation history to step back into
+    if (navigationStack.length > 1) {
       const updatedStack = [...navigationStack];
-      updatedStack.pop(); // Remove active state
+      updatedStack.pop(); // Remove current active state
       const targetState = updatedStack[updatedStack.length - 1];
       setNavigationStack(updatedStack);
-      restoreNavigationEntry(targetState);
+      restoreStackEntry(targetState);
       return true;
     }
 
-    // 5. If on the only result in stack, popping clears results back to clean home state
-    if (isResultActive && navigationStack.length === 1) {
+    // 5. If on the first/only result in stack, popping clears results back to clean home state
+    if (navigationStack.length === 1) {
       setNavigationStack([]);
       clearResults();
       return true;
@@ -225,7 +237,7 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     // 6. If no active results / stack is empty, show exit confirmation dialog
     setShowExitModal(true);
     return true;
-  }, [isExpanded, navigationStack, showExitModal, searchResults, aiResponse, restoreNavigationEntry]);
+  }, [isExpanded, navigationStack, showExitModal, searchResults.length, aiResponse, restoreStackEntry]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', handleHardwareBackPress);
@@ -545,24 +557,28 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   const submitPlaceRating = async (targetId: string, rating: number, targetType: 'place' | 'itinerary' = 'place') => {
     try {
       logger.app(`Submitting ${rating}-star rating for ${targetType}: ${targetId}`);
-      const res = await searchService.submitTargetFeedback({
-        user_id_or_anon: 'anon_traveler',
-        target_type: targetType,
-        target_id: targetId,
-        rating,
-      });
+      
+      // 1. Immediately update local active ratings state
+      setUserRatings((prev) => ({ ...prev, [targetId]: rating }));
 
-      // Update local state rating gracefully
+      // 2. Persist locally via single active rating per user (TargetFeedback) and sync with server
+      const res = await contributionService.submitRating(targetId, rating, targetType, 'anon_traveler');
+
+      const averageRating = res?.average_rating || rating;
+      const ratingCount = res?.rating_count || 1;
+      const weightedScore = res?.weighted_score || rating;
+
+      // 3. Update search results and suggestions rating structures gracefully
       setSearchResults((prev) =>
         prev.map((item) =>
           item.id === targetId || item.name === targetId
             ? {
                 ...item,
-                rating: res.average_rating || rating,
+                rating: averageRating,
                 feedback: {
-                  averageRating: res.average_rating || rating,
-                  ratingCount: res.rating_count || 1,
-                  weightedScore: res.weighted_score || rating,
+                  averageRating,
+                  ratingCount,
+                  weightedScore,
                 },
               }
             : item
@@ -574,11 +590,11 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
           item.id === targetId || item.name === targetId
             ? {
                 ...item,
-                rating: res.average_rating || rating,
+                rating: averageRating,
                 feedback: {
-                  averageRating: res.average_rating || rating,
-                  ratingCount: res.rating_count || 1,
-                  weightedScore: res.weighted_score || rating,
+                  averageRating,
+                  ratingCount,
+                  weightedScore,
                 },
               }
             : item
@@ -626,18 +642,19 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       showExitModal,
       setShowExitModal,
       handleHardwareBackPress,
-      setActiveMapCategory,
-      addAttachment,
-      removeAttachment,
       loadSuggestions,
       performSearch,
       submitAIPrompt,
       submitPlaceRating,
+      userRatings,
       isUsingCachedResult,
       refetchCurrentResults,
       clearResults,
       requestUserLocation,
       setSelectedPlaceId,
+      addAttachment,
+      removeAttachment,
+      setActiveMapCategory,
     }),
     [
       activeMode,
@@ -650,13 +667,6 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       isProcessingAI,
       suggestions,
       searchResults,
-      categorizedResults,
-      activeMapCategory,
-      searchHistory,
-      promptHistory,
-      navigationStack,
-      showExitModal,
-      handleHardwareBackPress,
       hiddenGems,
       tips,
       nearbyPlaces,
@@ -665,7 +675,26 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       userLocation,
       selectedPlaceId,
       isMapVisible,
+      categorizedResults,
+      activeMapCategory,
+      searchHistory,
+      promptHistory,
+      navigationStack,
+      showExitModal,
       isUsingCachedResult,
+      userRatings,
+      handleHardwareBackPress,
+      loadSuggestions,
+      performSearch,
+      submitAIPrompt,
+      submitPlaceRating,
+      refetchCurrentResults,
+      clearResults,
+      requestUserLocation,
+      setSelectedPlaceId,
+      addAttachment,
+      removeAttachment,
+      setActiveMapCategory,
     ]
   );
 

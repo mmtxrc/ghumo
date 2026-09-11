@@ -10,7 +10,7 @@
  * - Bi-directional synchronization with OpenStreetMap camera & pins
  */
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Share,
+  Linking,
 } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -59,13 +61,18 @@ export const MapPlaceCarousel: React.FC = () => {
     selectedPlaceId,
     setSelectedPlaceId,
     submitPlaceRating,
+    userRatings,
     clearResults,
   } = useHome();
 
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [actionCardId, setActionCardId] = useState<string | null>(null);
 
   const placesScrollViewRef = useRef<ScrollView>(null);
   const timeScrollViewRef = useRef<ScrollView>(null);
+  const isScrollingProgrammatically = useRef(false);
+  const scrollTimeoutRef = useRef<any>(null);
+  const lastScrolledIdRef = useRef<string | null>(null);
 
   const screenWidth = Dimensions.get('window').width;
   const containerWidth = Math.min(screenWidth - 28, 440);
@@ -213,23 +220,6 @@ export const MapPlaceCarousel: React.FC = () => {
   const activeDaySchedule = aiItineraryDays[selectedDayIndex] || aiItineraryDays[0];
   const activeDayPlaces = activeDaySchedule?.items || [];
 
-  // When day changes, scroll to initial position & focus first place
-  useEffect(() => {
-    if (activeDayPlaces.length > 0) {
-      const currentSelected = activeDayPlaces.find((p) => p.id === selectedPlaceId);
-      if (!currentSelected) {
-        setSelectedPlaceId(activeDayPlaces[0].id);
-        placesScrollViewRef.current?.scrollTo({ x: 0, animated: true });
-        timeScrollViewRef.current?.scrollTo({ x: 0, animated: true });
-      } else {
-        const idx = activeDayPlaces.indexOf(currentSelected);
-        if (idx >= 0) {
-          placesScrollViewRef.current?.scrollTo({ x: idx * (CARD_WIDTH + CARD_GAP), animated: true });
-        }
-      }
-    }
-  }, [selectedDayIndex]);
-
   // Filter places for search mode
   const filteredSearchPlaces: PlaceSearchResult[] = useMemo(() => {
     if (categorizedResults) {
@@ -260,11 +250,68 @@ export const MapPlaceCarousel: React.FC = () => {
     return [];
   }, [categorizedResults, aiResponse]);
 
+  // Scroll smoothly to exact card index without triggering oscillation loops
+  const scrollToCardIndex = useCallback((index: number, placeId?: string) => {
+    if (index < 0) return;
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    isScrollingProgrammatically.current = true;
+    if (placeId) {
+      lastScrolledIdRef.current = placeId;
+    }
+    placesScrollViewRef.current?.scrollTo({ x: index * (CARD_WIDTH + CARD_GAP), animated: true });
+    timeScrollViewRef.current?.scrollTo({ x: Math.max(0, index * 60 - 40), animated: true });
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingProgrammatically.current = false;
+    }, 450);
+  }, [CARD_WIDTH, CARD_GAP]);
+
+  // When day changes, scroll to initial position & focus first place
+  useEffect(() => {
+    if (activeDayPlaces.length > 0) {
+      const currentSelected = activeDayPlaces.find((p) => p.id === selectedPlaceId);
+      if (!currentSelected) {
+        setSelectedPlaceId(activeDayPlaces[0].id);
+        scrollToCardIndex(0, activeDayPlaces[0].id);
+      } else {
+        const idx = activeDayPlaces.indexOf(currentSelected);
+        if (idx >= 0) {
+          scrollToCardIndex(idx, currentSelected.id);
+        }
+      }
+    }
+  }, [selectedDayIndex]);
+
+  // Center carousel when selectedPlaceId changes (e.g. from map pin tap or day switch)
+  useEffect(() => {
+    if (!selectedPlaceId) return;
+    if (lastScrolledIdRef.current === selectedPlaceId) return;
+
+    if (aiResponse && activeDayPlaces.length > 0) {
+      const idx = activeDayPlaces.findIndex((p) => p.id === selectedPlaceId);
+      if (idx >= 0) {
+        scrollToCardIndex(idx, selectedPlaceId);
+      }
+    } else if (filteredSearchPlaces.length > 0) {
+      const idx = filteredSearchPlaces.findIndex((p) => p.id === selectedPlaceId);
+      if (idx >= 0) {
+        scrollToCardIndex(idx, selectedPlaceId);
+      }
+    }
+  }, [selectedPlaceId, aiResponse, activeDayPlaces, filteredSearchPlaces, scrollToCardIndex]);
+
   const isTipsMode = activeMapCategory === 'tips' && activeTips.length > 0;
   const hasAiContent = Boolean(aiResponse) && aiItineraryDays.length > 0;
   const hasSearchContent = filteredSearchPlaces.length > 0 || isTipsMode;
   const hasContent = hasAiContent || hasSearchContent;
   const isVisible = isMapVisible && !isExpanded && (hasContent || isSearching || isProcessingAI);
+
+  // Handle rating click: persists single active rating locally & syncs with backend
+  const handleRatePlace = (placeId: string, star: number) => {
+    submitPlaceRating(placeId, star);
+  };
 
   if (!isVisible) {
     return null;
@@ -308,25 +355,110 @@ export const MapPlaceCarousel: React.FC = () => {
   // Handle Time circle tap
   const handleSelectTimeItem = (item: DayTimeItem, index: number) => {
     setSelectedPlaceId(item.id);
-    placesScrollViewRef.current?.scrollTo({ x: index * (CARD_WIDTH + CARD_GAP), animated: true });
+    scrollToCardIndex(index, item.id);
   };
 
-  // Handle place card click to toggle expansion with smooth layout animation
-  const handleCardPress = (placeId: string) => {
+  // Handle place card click: select place, center card in carousel, and fly map to location
+  const handleCardPress = (placeId: string, index?: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedPlaceId(placeId);
-    setExpandedCardId((prev) => (prev === placeId ? null : placeId));
+    if (typeof index === 'number') {
+      scrollToCardIndex(index, placeId);
+    }
+  };
+
+  // Handle place card long press to toggle Share / Visit buttons
+  const handleCardLongPress = (placeId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedPlaceId(placeId);
+    setActionCardId((prev) => (prev === placeId ? null : placeId));
+  };
+
+  // Share place with rich formatted text and Google Maps deep link (safe on web and native)
+  const handleSharePlace = async (place: PlaceSearchResult, timeSlot?: string) => {
+    try {
+      const anyPlace = place as any;
+      const lat = place.lat ?? anyPlace.latitude;
+      const lng = place.lng ?? anyPlace.longitude;
+      const mapsUrl = lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : '';
+      const timeText = timeSlot ? `\n⏰ Time: ${timeSlot}` : (place.timings ? `\n⏰ Timings: ${place.timings}` : '');
+      const priceVal = place.ticket_price || anyPlace.price || anyPlace.entry_fee;
+      const priceText = priceVal ? `\n🎟️ Entry: ${priceVal}` : '';
+      const descText = place.description || place.reason ? `\n${place.description || place.reason}` : '';
+      const locationText = place.city || anyPlace.address ? `\n📍 ${place.city || anyPlace.address}` : '';
+      const mapLinkText = mapsUrl ? `\n\nExplore on Map: ${mapsUrl}` : '';
+
+      const message = `✨ ${place.name}${locationText}${timeText}${priceText}${descText}${mapLinkText}\n\nShared via Ghumo 🌍`;
+
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && (navigator as any).share) {
+          try {
+            await (navigator as any).share({
+              title: place.name,
+              text: message,
+              url: mapsUrl || undefined,
+            });
+          } catch {
+            // Dismissed or cancelled
+          }
+        } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(message);
+        }
+      } else {
+        await Share.share(
+          {
+            title: place.name,
+            message,
+            url: mapsUrl || undefined,
+          },
+          {
+            dialogTitle: `Share ${place.name}`,
+          }
+        );
+      }
+    } catch {
+      // Ignore user cancellation
+    }
+  };
+
+  // Visit place directly in device map apps using deep link coordinates
+  const handleVisitPlace = async (place: PlaceSearchResult) => {
+    try {
+      const anyPlace = place as any;
+      const lat = place.lat ?? anyPlace.latitude;
+      const lng = place.lng ?? anyPlace.longitude;
+      const name = encodeURIComponent(place.name || 'Location');
+      if (lat && lng) {
+        const scheme = Platform.select({
+          ios: `maps:0,0?q=${name}@${lat},${lng}`,
+          android: `geo:${lat},${lng}?q=${lat},${lng}(${name})`,
+          default: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
+        });
+        const supported = await Linking.canOpenURL(scheme);
+        if (supported) {
+          await Linking.openURL(scheme);
+        } else {
+          await Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
+        }
+      } else {
+        await Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${name}`);
+      }
+    } catch {
+      // Fallback
+    }
   };
 
   return (
     <View style={styles.outerContainer} pointerEvents="box-none">
-      {/* "Explore <location>" text with drop shadow / outline right above the carousel */}
+      {/* "Explore <location>" text with drop shadow right above the carousel */}
       {Boolean(exploreLocationTitle) && (
         <View style={[styles.exploreHeaderContainer, { width: containerWidth }]} pointerEvents="none">
           <Text
             style={[
               styles.exploreHeaderText,
-              isDark ? styles.exploreHeaderTextDark : styles.exploreHeaderTextLight,
+              isDark
+                ? styles.exploreHeaderTextDark
+                : [styles.exploreHeaderTextLight, { color: theme.colors.primary.default }],
             ]}
             numberOfLines={1}
           >
@@ -484,15 +616,21 @@ export const MapPlaceCarousel: React.FC = () => {
                 styles.scrollContainer,
                 { paddingHorizontal: SIDE_INSET, gap: CARD_GAP },
               ]}
+              onScrollBeginDrag={() => {
+                isScrollingProgrammatically.current = false;
+              }}
               onMomentumScrollEnd={(e) => {
+                if (isScrollingProgrammatically.current) return;
                 const offsetX = e.nativeEvent.contentOffset.x;
-                const index = Math.round(offsetX / (CARD_WIDTH + CARD_GAP));
-                if (activeDayPlaces[index]) {
+                const index = Math.max(0, Math.min(Math.round(offsetX / (CARD_WIDTH + CARD_GAP)), activeDayPlaces.length - 1));
+                if (activeDayPlaces[index] && activeDayPlaces[index].id !== selectedPlaceId) {
+                  lastScrolledIdRef.current = activeDayPlaces[index].id;
                   setSelectedPlaceId(activeDayPlaces[index].id);
+                  timeScrollViewRef.current?.scrollTo({ x: Math.max(0, index * 60 - 40), animated: true });
                 }
               }}
             >
-              {activeDayPlaces.map((item) => {
+              {activeDayPlaces.map((item, idx) => {
                 const place = item.place;
                 const isSelected = selectedPlaceId === place.id;
                 const isCardExpanded = expandedCardId === place.id;
@@ -502,7 +640,9 @@ export const MapPlaceCarousel: React.FC = () => {
                   <TouchableOpacity
                     key={place.id}
                     activeOpacity={0.92}
-                    onPress={() => handleCardPress(place.id)}
+                    onPress={() => handleCardPress(place.id, idx)}
+                    onLongPress={() => handleCardLongPress(place.id)}
+                    delayLongPress={300}
                     style={[
                       styles.card,
                       {
@@ -548,44 +688,72 @@ export const MapPlaceCarousel: React.FC = () => {
                           )}
                         </View>
 
-                        {/* Scheduled Time & Category Tag */}
-                        <View style={styles.timeBadgeRow}>
-                          <Feather name="clock" size={10.5} color={theme.colors.primary.default} style={{ marginRight: 3 }} />
-                          <Text style={[styles.timeScheduleBadge, { color: theme.colors.primary.default }]} numberOfLines={1}>
-                            {item.time}
-                          </Text>
-                        </View>
+                        {/* Empty spacing placeholder in place of removed in-card timings */}
+                        <View style={styles.cardEmptySpace} />
 
-                        {/* Description: 2 lines when contracted, full when expanded */}
+                        {/* Description: full text always expanded */}
                         {Boolean(place.description || place.reason) && (
-                          <Text
-                            style={[styles.descText, { color: theme.colors.text.secondary }]}
-                            numberOfLines={isCardExpanded ? undefined : 2}
-                          >
+                          <Text style={[styles.descText, { color: theme.colors.text.secondary }]}>
                             {place.description || place.reason}
                           </Text>
                         )}
 
-                        {/* 1-5 Star Interactive Rating: Rendered ONLY when card is expanded */}
-                        {isCardExpanded && (
-                          <View style={styles.ratingRow}>
-                            <Text style={[styles.rateLabel, { color: theme.colors.text.muted }]}>Rate:</Text>
-                            {[1, 2, 3, 4, 5].map((star) => (
+                        {/* 1-5 Star Interactive Rating: Out of the box, unfilled by default, filled on click */}
+                        <View style={styles.ratingRow}>
+                          {[1, 2, 3, 4, 5].map((star) => {
+                            const userRating = userRatings[place.id] || 0;
+                            const isFilled = star <= userRating;
+                            return (
                               <TouchableOpacity
                                 key={star}
-                                style={[styles.starBtn, { backgroundColor: isDark ? '#2E2B27' : '#EFE8DE' }]}
-                                onPress={() => submitPlaceRating(place.id, star)}
-                                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                                style={styles.starBtn}
+                                onPress={() => handleRatePlace(place.id, star)}
+                                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Rate ${star} stars`}
                               >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-                                  <Text style={{ fontSize: 10.5, color: '#D95338', fontWeight: '700' }}>{star}</Text>
-                                  <Ionicons name="star" size={9.5} color="#D95338" />
-                                </View>
+                                <Ionicons
+                                  name={isFilled ? 'star' : 'star-outline'}
+                                  size={16}
+                                  color={isFilled ? '#E59834' : (isDark ? '#8A8177' : '#B5ABA0')}
+                                />
                               </TouchableOpacity>
-                            ))}
-                          </View>
-                        )}
+                            );
+                          })}
+                        </View>
                       </View>
+                    </View>
+
+                    {/* Action Buttons: Share & Visit (Always visible) */}
+                    <View style={styles.actionButtonsRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionBtnOutline,
+                          {
+                            backgroundColor: isDark ? '#2E2A27' : '#FFFFFF',
+                            borderColor: isDark ? '#474039' : '#DED6C8',
+                          },
+                        ]}
+                        onPress={() => handleSharePlace(place, item.time)}
+                        activeOpacity={0.75}
+                      >
+                        <Feather name="share-2" size={13} color={theme.colors.text.primary} style={{ marginRight: 5 }} />
+                        <Text style={[styles.actionBtnTextOutline, { color: theme.colors.text.primary }]}>Share</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.actionBtnFilled,
+                          {
+                            backgroundColor: theme.colors.primary.default,
+                          },
+                        ]}
+                        onPress={() => handleVisitPlace(place)}
+                        activeOpacity={0.8}
+                      >
+                        <Feather name="navigation" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                        <Text style={styles.actionBtnTextFilled}>Visit</Text>
+                      </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
                 );
@@ -645,15 +813,20 @@ export const MapPlaceCarousel: React.FC = () => {
               styles.scrollContainer,
               { paddingHorizontal: SIDE_INSET, gap: CARD_GAP },
             ]}
+            onScrollBeginDrag={() => {
+              isScrollingProgrammatically.current = false;
+            }}
             onMomentumScrollEnd={(e) => {
+              if (isScrollingProgrammatically.current) return;
               const offsetX = e.nativeEvent.contentOffset.x;
-              const index = Math.round(offsetX / (CARD_WIDTH + CARD_GAP));
-              if (filteredSearchPlaces[index]) {
+              const index = Math.max(0, Math.min(Math.round(offsetX / (CARD_WIDTH + CARD_GAP)), filteredSearchPlaces.length - 1));
+              if (filteredSearchPlaces[index] && filteredSearchPlaces[index].id !== selectedPlaceId) {
+                lastScrolledIdRef.current = filteredSearchPlaces[index].id;
                 setSelectedPlaceId(filteredSearchPlaces[index].id);
               }
             }}
           >
-            {filteredSearchPlaces.map((place) => {
+            {filteredSearchPlaces.map((place, idx) => {
               const isSelected = selectedPlaceId === place.id;
               const isCardExpanded = expandedCardId === place.id;
               const imageUri = place.image?.url || place.imageUrl;
@@ -662,7 +835,9 @@ export const MapPlaceCarousel: React.FC = () => {
                 <TouchableOpacity
                   key={place.id}
                   activeOpacity={0.9}
-                  onPress={() => handleCardPress(place.id)}
+                  onPress={() => handleCardPress(place.id, idx)}
+                  onLongPress={() => handleCardLongPress(place.id)}
+                  delayLongPress={300}
                   style={[
                     styles.card,
                     {
@@ -708,35 +883,72 @@ export const MapPlaceCarousel: React.FC = () => {
                         )}
                       </View>
 
+                      {/* Empty spacing placeholder */}
+                      <View style={styles.cardEmptySpace} />
+
+                      {/* Description: full text always expanded */}
                       {Boolean(place.reason || place.description) && (
-                        <Text
-                          style={[styles.descText, { color: theme.colors.text.secondary }]}
-                          numberOfLines={isCardExpanded ? undefined : 2}
-                        >
+                        <Text style={[styles.descText, { color: theme.colors.text.secondary }]}>
                           {place.reason || place.description}
                         </Text>
                       )}
 
-                      {/* 1-5 Star Interactive Rating: Rendered ONLY when card is expanded */}
-                      {isCardExpanded && (
-                        <View style={styles.ratingRow}>
-                          <Text style={[styles.rateLabel, { color: theme.colors.text.muted }]}>Rate:</Text>
-                          {[1, 2, 3, 4, 5].map((star) => (
+                      {/* 1-5 Star Interactive Rating: Out of the box, unfilled by default, filled on click */}
+                      <View style={styles.ratingRow}>
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const userRating = userRatings[place.id] || 0;
+                          const isFilled = star <= userRating;
+                          return (
                             <TouchableOpacity
                               key={star}
-                              style={[styles.starBtn, { backgroundColor: isDark ? '#2E2B27' : '#EFE8DE' }]}
-                              onPress={() => submitPlaceRating(place.id, star)}
-                              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                              style={styles.starBtn}
+                              onPress={() => handleRatePlace(place.id, star)}
+                              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Rate ${star} stars`}
                             >
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
-                                <Text style={{ fontSize: 10.5, color: '#D95338', fontWeight: '700' }}>{star}</Text>
-                                <Ionicons name="star" size={9.5} color="#D95338" />
-                              </View>
+                              <Ionicons
+                                name={isFilled ? 'star' : 'star-outline'}
+                                size={16}
+                                color={isFilled ? '#E59834' : (isDark ? '#8A8177' : '#B5ABA0')}
+                              />
                             </TouchableOpacity>
-                          ))}
-                        </View>
-                      )}
+                          );
+                        })}
+                      </View>
                     </View>
+                  </View>
+
+                  {/* Action Buttons: Share & Visit (Always visible) */}
+                  <View style={styles.actionButtonsRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtnOutline,
+                        {
+                          backgroundColor: isDark ? '#2E2A27' : '#FFFFFF',
+                          borderColor: isDark ? '#474039' : '#DED6C8',
+                        },
+                      ]}
+                      onPress={() => handleSharePlace(place)}
+                      activeOpacity={0.75}
+                    >
+                      <Feather name="share-2" size={13} color={theme.colors.text.primary} style={{ marginRight: 5 }} />
+                      <Text style={[styles.actionBtnTextOutline, { color: theme.colors.text.primary }]}>Share</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.actionBtnFilled,
+                        {
+                          backgroundColor: theme.colors.primary.default,
+                        },
+                      ]}
+                      onPress={() => handleVisitPlace(place)}
+                      activeOpacity={0.8}
+                    >
+                      <Feather name="navigation" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                      <Text style={styles.actionBtnTextFilled}>Visit</Text>
+                    </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
               );
@@ -774,10 +986,50 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   exploreHeaderTextLight: {
-    color: '#11100E',
-    textShadowColor: '#FFFFFF',
+    textShadowColor: 'rgba(255,255,255,0.95)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 8,
+    textShadowRadius: 6,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  actionBtnOutline: {
+    flex: 1,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnTextOutline: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  actionBtnFilled: {
+    flex: 1,
+    height: 34,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionBtnTextFilled: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   carouselWrapper: {
     borderRadius: 22,
@@ -825,10 +1077,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  timeBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 1,
+  cardEmptySpace: {
+    height: 14,
+    marginVertical: 1,
   },
   ratingBadge: {
     flexDirection: 'row',
@@ -943,11 +1194,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 6,
   },
-  timeScheduleBadge: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 1,
-  },
   descText: {
     fontSize: 11.5,
     lineHeight: 15,
@@ -956,18 +1202,14 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    marginTop: 4,
-  },
-  rateLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginRight: 2,
+    gap: 4,
+    marginTop: 6,
   },
   starBtn: {
-    paddingVertical: 1,
-    paddingHorizontal: 4,
-    borderRadius: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tipCardHeader: {
     marginBottom: 4,

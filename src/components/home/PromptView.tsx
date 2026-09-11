@@ -13,6 +13,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   Modal,
+  Share,
+  Platform,
 } from 'react-native';
 import { ScrollView, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Path, Line } from 'react-native-svg';
@@ -64,6 +66,79 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
   const handleSubmit = () => {
     if (aiPrompt.trim()) {
       submitAIPrompt(aiPrompt);
+    }
+  };
+
+  const handleShareItinerary = async () => {
+    if (!aiResponse) return;
+    try {
+      let text = `🗺️ *${aiResponse.title}*\n`;
+      if (aiResponse.location) text += `📍 Destination: ${aiResponse.location}\n`;
+      if (aiResponse.budget) text += `💰 Estimated Budget: ${aiResponse.budget}\n`;
+      if (aiResponse.summary) text += `\n📝 ${aiResponse.summary}\n`;
+
+      if (aiResponse.days && aiResponse.days.length > 0) {
+        text += `\n━━━━━━━━━━━━━━━━━━━━\n📅 *DAY-BY-DAY ITINERARY*\n━━━━━━━━━━━━━━━━━━━━\n`;
+        aiResponse.days.forEach((day: any) => {
+          const dayNum = day.dayNumber || day.day;
+          text += `\n🔹 *Day ${dayNum}: ${day.title || ''}*\n`;
+          if (day.estimatedDayCost) text += `   💵 Day Budget: ${day.estimatedDayCost}\n`;
+          const places = day.places || day.activities || [];
+          places.forEach((p: any, idx: number) => {
+            const time = p.time || p.time_slot || `Stop ${idx + 1}`;
+            const name = p.name || p.place || '';
+            const desc = p.description || p.reason || p.activity || '';
+            const cost = p.cost || p.price || p.entry_fee || '';
+            text += `   • [${time}] ${name}\n`;
+            if (desc) text += `     ${desc}\n`;
+            if (cost) text += `     Entry/Cost: ${cost}\n`;
+          });
+        });
+      }
+
+      if (aiResponse.recommended_places && aiResponse.recommended_places.length > 0) {
+        text += `\n━━━━━━━━━━━━━━━━━━━━\n⭐ *RECOMMENDED SPOTS*\n━━━━━━━━━━━━━━━━━━━━\n`;
+        aiResponse.recommended_places.forEach((p: any) => {
+          text += `\n• *${p.name}* (${p.type || 'Attraction'})\n`;
+          if (p.reason || p.description) text += `  ${p.reason || p.description}\n`;
+        });
+      }
+
+      if (aiResponse.tips && aiResponse.tips.length > 0) {
+        text += `\n━━━━━━━━━━━━━━━━━━━━\n💡 *TRAVEL TIPS*\n━━━━━━━━━━━━━━━━━━━━\n`;
+        aiResponse.tips.forEach((tip: string) => {
+          text += `• ${tip}\n`;
+        });
+      }
+
+      text += `\n✨ Curated with Ghumo AI Travel App 🌍`;
+
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && (navigator as any).share) {
+          try {
+            await (navigator as any).share({
+              title: aiResponse.title || 'Ghumo Itinerary',
+              text,
+            });
+          } catch {
+            // Dismissed or cancelled
+          }
+        } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+        }
+      } else {
+        await Share.share(
+          {
+            title: aiResponse.title || 'Trip Itinerary',
+            message: text,
+          },
+          {
+            dialogTitle: 'Share Trip Itinerary',
+          }
+        );
+      }
+    } catch {
+      // Ignore user cancellation
     }
   };
 
@@ -206,68 +281,40 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
         overScrollMode="always"
       >
 
-        {/* Recent AI Prompts (Last 5 history items in one line - Press & Hold to preview full, Tap to execute) */}
-        {!aiResponse && promptHistory && promptHistory.length > 0 && (
-          <View style={styles.historySection}>
-            <View style={styles.sectionHeadingRow}>
-              <Feather name="clock" size={13} color={theme.colors.text.secondary} />
-              <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
-                Recent Prompts
-              </Text>
-            </View>
-            <View style={styles.historyList}>
-              {promptHistory.map((item, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={[
-                    styles.historyItem,
-                    {
-                      backgroundColor: isDark ? '#24211E' : '#FAF6EE',
-                      borderColor: isDark ? '#36312C' : '#E8E1D5',
-                    },
-                  ]}
-                  onPress={() => {
-                    setAiPrompt(item);
-                    submitAIPrompt(item);
-                  }}
-                  onLongPress={() => {
-                    setSelectedHistoryPrompt(item);
-                  }}
-                  delayLongPress={350}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="sparkles" size={14} color={theme.colors.primary.default} />
-                  <Text
-                    style={[styles.historyText, { color: theme.colors.text.primary }]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {item}
-                  </Text>
-                  <Feather name="arrow-up-right" size={16} color={theme.colors.primary.default} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {aiResponse ? (
+        {aiResponse && (
           <View style={[styles.itineraryCard, { backgroundColor: isDark ? '#24211E' : '#F9F4EB', borderColor: theme.colors.primary.default }]}>
             <View style={styles.itineraryHeader}>
               <View style={styles.titleWithIcon}>
-                <Ionicons name="sparkles" size={16} color={theme.colors.primary.default} />
+                <Ionicons name="sparkles-outline" size={16} color={theme.colors.primary.default} />
                 <Text style={[styles.itineraryTitle, { color: theme.colors.primary.default }]}>
                   {aiResponse.title}
                 </Text>
               </View>
-              {aiResponse.budget && (
-                <View style={[styles.budgetBadgeContainer, { backgroundColor: isDark ? '#2B2520' : '#F7EBE2' }]}>
-                  <MaterialCommunityIcons name="cash-multiple" size={13} color={theme.colors.primary.default} />
-                  <Text style={[styles.budgetBadge, { color: theme.colors.primary.default }]}>
-                    {aiResponse.budget}
-                  </Text>
-                </View>
-              )}
+              <View style={styles.itineraryHeaderRight}>
+                {aiResponse.budget && (
+                  <View style={[styles.budgetBadgeContainer, { backgroundColor: isDark ? '#2B2520' : '#F7EBE2' }]}>
+                    <MaterialCommunityIcons name="cash-multiple" size={13} color={theme.colors.primary.default} />
+                    <Text style={[styles.budgetBadge, { color: theme.colors.primary.default }]}>
+                      {aiResponse.budget}
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.shareItineraryBtn,
+                    {
+                      backgroundColor: theme.colors.primary.default,
+                    },
+                  ]}
+                  onPress={handleShareItinerary}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share complete itinerary"
+                >
+                  <Feather name="share-2" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.shareItineraryText}>Share</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <Text style={[styles.itinerarySummary, { color: theme.colors.text.primary }]}>
               {aiResponse.summary}
@@ -377,48 +424,94 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
               </View>
             )}
           </View>
-        ) : (
-          <View style={styles.starterSection}>
-            <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
-              Starter Trip Inspirations
-            </Text>
-            {STARTER_PROMPTS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.promptCard,
-                  {
-                    backgroundColor: isDark ? '#24211E' : '#F6F0E6',
-                    borderColor: isDark ? '#36302B' : '#E6DEC1',
-                  },
-                ]}
-                onPress={() => {
-                  setAiPrompt(item.prompt);
-                  submitAIPrompt(item.prompt);
-                }}
-                activeOpacity={0.75}
-              >
-                <View style={styles.promptHeaderRow}>
-                  {item.iconPack === 'Ionicons' && (
-                    <Ionicons name={item.iconName as any} size={15} color={theme.colors.primary.default} />
-                  )}
-                  {item.iconPack === 'Feather' && (
-                    <Feather name={item.iconName as any} size={14} color={theme.colors.primary.default} />
-                  )}
-                  {item.iconPack === 'FontAwesome5' && (
-                    <FontAwesome5 name={item.iconName as any} size={13} color={theme.colors.primary.default} />
-                  )}
-                  <Text style={[styles.promptTitle, { color: theme.colors.text.primary }]}>
-                    {item.title}
+        )}
+
+        {/* Recent AI Prompts (ALWAYS DISPLAYED: directly below prompt bar when no results, or below results when itinerary is active) */}
+        {promptHistory && promptHistory.length > 0 && (
+          <View style={styles.historySection}>
+            <View style={styles.sectionHeadingRow}>
+              <Feather name="clock" size={13} color={theme.colors.text.secondary} />
+              <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+                Recent Prompts
+              </Text>
+            </View>
+            <View style={styles.historyList}>
+              {promptHistory.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.historyItem,
+                    {
+                      backgroundColor: isDark ? '#24211E' : '#FAF6EE',
+                      borderColor: isDark ? '#36312C' : '#E8E1D5',
+                    },
+                  ]}
+                  onPress={() => {
+                    setAiPrompt(item);
+                    submitAIPrompt(item);
+                  }}
+                  onLongPress={() => {
+                    setSelectedHistoryPrompt(item);
+                  }}
+                  delayLongPress={350}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="sparkles-outline" size={14} color={theme.colors.primary.default} />
+                  <Text
+                    style={[styles.historyText, { color: theme.colors.text.primary }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {item}
                   </Text>
-                </View>
-                <Text style={[styles.promptBody, { color: theme.colors.text.muted }]}>
-                  {item.prompt}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Feather name="arrow-up-right" size={16} color={theme.colors.primary.default} />
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
+
+        {/* Starter Trip Inspirations */}
+        <View style={styles.starterSection}>
+          <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+            Starter Trip Inspirations
+          </Text>
+          {STARTER_PROMPTS.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.promptCard,
+                {
+                  backgroundColor: isDark ? '#24211E' : '#F6F0E6',
+                  borderColor: isDark ? '#36302B' : '#E6DEC1',
+                },
+              ]}
+              onPress={() => {
+                setAiPrompt(item.prompt);
+                submitAIPrompt(item.prompt);
+              }}
+              activeOpacity={0.75}
+            >
+              <View style={styles.promptHeaderRow}>
+                {item.iconPack === 'Ionicons' && (
+                  <Ionicons name={item.iconName as any} size={15} color={theme.colors.primary.default} />
+                )}
+                {item.iconPack === 'Feather' && (
+                  <Feather name={item.iconName as any} size={14} color={theme.colors.primary.default} />
+                )}
+                {item.iconPack === 'FontAwesome5' && (
+                  <FontAwesome5 name={item.iconName as any} size={13} color={theme.colors.primary.default} />
+                )}
+                <Text style={[styles.promptTitle, { color: theme.colors.text.primary }]}>
+                  {item.title}
+                </Text>
+              </View>
+              <Text style={[styles.promptBody, { color: theme.colors.text.muted }]}>
+                {item.prompt}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </ScrollView>
 
       {/* Full Prompt Preview Modal on Long Press */}
@@ -440,7 +533,7 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
           >
             <View style={styles.modalHeaderRow}>
               <View style={styles.titleWithIcon}>
-                <Ionicons name="sparkles" size={16} color={theme.colors.primary.default} />
+                <Ionicons name="sparkles-outline" size={16} color={theme.colors.primary.default} />
                 <Text style={[styles.modalTitle, { color: theme.colors.primary.default }]}>
                   Full AI Prompt
                 </Text>
@@ -483,7 +576,7 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
               >
                 <View style={styles.chipRow}>
                   <Text style={styles.modalSubmitText}>Hit Go</Text>
-                  <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+                  <Ionicons name="sparkles-outline" size={13} color="#FFFFFF" />
                 </View>
               </TouchableOpacity>
             </View>
@@ -705,6 +798,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+  },
+  itineraryHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  shareItineraryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1.5 },
+    shadowOpacity: 0.16,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  shareItineraryText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   titleWithIcon: {
     flexDirection: 'row',

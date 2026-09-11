@@ -215,45 +215,8 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
         bounces={true}
         overScrollMode="always"
       >
-        {/* Search History (Last 5 terms - Enlisted below pills when in default view) */}
-        {!hasProcessedSearch && searchHistory.length > 0 && (
-          <View style={styles.historySection}>
-            <View style={styles.sectionHeadingRow}>
-              <Feather name="clock" size={13} color={theme.colors.text.secondary} />
-              <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
-                Recent Searches
-              </Text>
-            </View>
-            <View style={styles.historyList}>
-              {searchHistory.map((item, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={[
-                    styles.historyItem,
-                    {
-                      backgroundColor: isDark ? '#24211E' : '#FAF6EE',
-                      borderColor: isDark ? '#36312C' : '#E8E1D5',
-                    },
-                  ]}
-                  onPress={() => {
-                    setSearchQuery(item);
-                    performSearch(item);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Feather name="search" size={13} color={theme.colors.text.muted} />
-                  <Text style={[styles.historyText, { color: theme.colors.text.primary }]} numberOfLines={1}>
-                    {item}
-                  </Text>
-                  <Feather name="arrow-up-right" size={16} color={theme.colors.primary.default} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
         {/* Live Search Results if Available */}
-        {hasProcessedSearch ? (
+        {hasProcessedSearch && (
           <View style={styles.resultsSection}>
             <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
               Search Results ({searchResults.length})
@@ -299,7 +262,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                 )}
                 {place.vibe && (
                   <View style={styles.inlineInfoRow}>
-                    <Ionicons name="sparkles" size={12} color={theme.colors.primary.default} />
+                    <Ionicons name="sparkles-outline" size={12} color={theme.colors.primary.default} />
                     <Text style={[styles.vibeText, { color: theme.colors.primary.default }]}>
                       Vibe: {place.vibe}
                     </Text>
@@ -344,7 +307,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                 )}
                 {place.must_see && (
                   <View style={styles.inlineInfoRow}>
-                    <Ionicons name="sparkles" size={12} color={theme.colors.primary.default} />
+                    <Ionicons name="sparkles-outline" size={12} color={theme.colors.primary.default} />
                     <Text style={[styles.mustSeeText, { color: theme.colors.primary.default }]}>
                       Must-See: {place.must_see}
                     </Text>
@@ -353,7 +316,44 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
               </TouchableOpacity>
             ))}
           </View>
-        ) : null}
+        )}
+
+        {/* Search History (ALWAYS DISPLAYED: directly below search bar when no results, or below results when search is active) */}
+        {searchHistory.length > 0 && (
+          <View style={styles.historySection}>
+            <View style={styles.sectionHeadingRow}>
+              <Feather name="clock" size={13} color={theme.colors.text.secondary} />
+              <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+                Recent Searches
+              </Text>
+            </View>
+            <View style={styles.historyList}>
+              {searchHistory.map((item, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.historyItem,
+                    {
+                      backgroundColor: isDark ? '#24211E' : '#FAF6EE',
+                      borderColor: isDark ? '#36312C' : '#E8E1D5',
+                    },
+                  ]}
+                  onPress={() => {
+                    setSearchQuery(item);
+                    performSearch(item);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Feather name="search" size={13} color={theme.colors.text.muted} />
+                  <Text style={[styles.historyText, { color: theme.colors.text.primary }]} numberOfLines={1}>
+                    {item}
+                  </Text>
+                  <Feather name="arrow-up-right" size={16} color={theme.colors.primary.default} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Ghumo AI Travel Planner Section from Real Datasets */}
         <View style={styles.plannerSection}>
@@ -414,7 +414,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                 >
                   <View style={styles.chipRow}>
                     <Text style={styles.cardActionBtnFillText}>Plan Itinerary</Text>
-                    <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+                    <Ionicons name="sparkles-outline" size={13} color="#FFFFFF" />
                   </View>
                 </TouchableOpacity>
               </View>

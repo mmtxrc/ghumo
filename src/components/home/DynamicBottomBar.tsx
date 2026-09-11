@@ -421,67 +421,112 @@ export const DynamicBottomBar: React.FC = () => {
     openSheet();
   };
 
-  // Zone 1 Header & Input Field Drag Gesture (React Native Gesture Handler)
-  const headerPanGesture = Gesture.Pan()
-    .activeOffsetY([-8, 8])
-    .failOffsetX([-25, 25])
-    .onStart(() => {
-      'worklet';
-      startSheetY.value = sheetTranslateY.value;
-    })
-    .onUpdate((event) => {
-      'worklet';
-      if (event.translationY > 0) {
-        sheetTranslateY.value = startSheetY.value + event.translationY;
-      } else {
-        sheetTranslateY.value = startSheetY.value + event.translationY * 0.15;
-      }
-      const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-      dragProgress.value = interpolate(
-        sheetTranslateY.value,
-        [currentHeight + 50, 0],
-        [0, 1],
-        Extrapolation.CLAMP
-      );
-    })
-    .onEnd((event) => {
-      'worklet';
-      if (event.translationY > 60 || event.velocityY > 250) {
+  // Zone 1 Top Handle Drag Gesture (memoized instance for sheet top handle)
+  const handlePanGesture = useMemo(() => {
+    return Gesture.Pan()
+      .activeOffsetY([-8, 8])
+      .failOffsetX([-25, 25])
+      .onStart(() => {
+        'worklet';
+        startSheetY.value = sheetTranslateY.value;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        if (event.translationY > 0) {
+          sheetTranslateY.value = startSheetY.value + event.translationY;
+        } else {
+          sheetTranslateY.value = startSheetY.value + event.translationY * 0.15;
+        }
         const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-        sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 200 });
-        dragProgress.value = withTiming(0, { duration: 200 }, (finished) => {
-          if (finished) {
-            runOnJS(closeSheet)();
-          }
-        });
-      } else {
-        sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 260 });
-        dragProgress.value = withSpring(1, { damping: 24, stiffness: 260 });
-      }
-    });
+        dragProgress.value = interpolate(
+          sheetTranslateY.value,
+          [currentHeight + 50, 0],
+          [0, 1],
+          Extrapolation.CLAMP
+        );
+      })
+      .onEnd((event) => {
+        'worklet';
+        if (event.translationY > 60 || event.velocityY > 250) {
+          const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+          sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 200 });
+          dragProgress.value = withTiming(0, { duration: 200 }, (finished) => {
+            if (finished) {
+              runOnJS(closeSheet)();
+            }
+          });
+        } else {
+          sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 260 });
+          dragProgress.value = withSpring(1, { damping: 24, stiffness: 260 });
+        }
+      });
+  }, [isAttachmentPickerOpen, expandedOverlayHeight, closeSheet, sheetTranslateY, startSheetY, dragProgress, ATTACHMENT_PICKER_HEIGHT]);
 
-  // Whole resting bottom bar swipe-up Gesture to open Search/Prompt view
-  const bottomBarPanGesture = Gesture.Pan()
-    .activeOffsetY([-8, 8])
-    .failOffsetX([-25, 25])
-    .onEnd((event) => {
-      'worklet';
-      if (event.translationY < -15 || event.velocityY < -200) {
-        runOnJS(openSheet)();
-      }
-    });
+  // Zone 1 Header & Input Field Drag Gesture (memoized separate instance for child search/prompt views)
+  const headerPanGesture = useMemo(() => {
+    return Gesture.Pan()
+      .activeOffsetY([-8, 8])
+      .failOffsetX([-25, 25])
+      .onStart(() => {
+        'worklet';
+        startSheetY.value = sheetTranslateY.value;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        if (event.translationY > 0) {
+          sheetTranslateY.value = startSheetY.value + event.translationY;
+        } else {
+          sheetTranslateY.value = startSheetY.value + event.translationY * 0.15;
+        }
+        const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+        dragProgress.value = interpolate(
+          sheetTranslateY.value,
+          [currentHeight + 50, 0],
+          [0, 1],
+          Extrapolation.CLAMP
+        );
+      })
+      .onEnd((event) => {
+        'worklet';
+        if (event.translationY > 60 || event.velocityY > 250) {
+          const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+          sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 200 });
+          dragProgress.value = withTiming(0, { duration: 200 }, (finished) => {
+            if (finished) {
+              runOnJS(closeSheet)();
+            }
+          });
+        } else {
+          sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 260 });
+          dragProgress.value = withSpring(1, { damping: 24, stiffness: 260 });
+        }
+      });
+  }, [isAttachmentPickerOpen, expandedOverlayHeight, closeSheet, sheetTranslateY, startSheetY, dragProgress, ATTACHMENT_PICKER_HEIGHT]);
+
+  // Whole resting bottom bar swipe-up Gesture to open Search/Prompt view (memoized)
+  const bottomBarPanGesture = useMemo(() => {
+    return Gesture.Pan()
+      .activeOffsetY([-8, 8])
+      .failOffsetX([-25, 25])
+      .onEnd((event) => {
+        'worklet';
+        if (event.translationY < -15 || event.velocityY < -200) {
+          runOnJS(openSheet)();
+        }
+      });
+  }, [openSheet]);
 
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
-      Keyboard.dismiss();
       performSearch(searchQuery);
     }
+    openSheet();
   };
 
   const handlePromptSubmit = () => {
     if (hasPromptText) {
-      Keyboard.dismiss();
       submitAIPrompt(aiPrompt);
+      openSheet();
     }
   };
 
@@ -701,50 +746,52 @@ export const DynamicBottomBar: React.FC = () => {
                   );
                 })}
               </ScrollView>
-            ) : (
+            ) : (!isSearching && !isProcessingAI) ? (
               /* Dynamic Mode Title: "Search" vs "Plan Your Itinerary" (in line with show/hide map button) */
-              <GestureDetector gesture={bottomBarPanGesture}>
-                <View style={styles.floatingHeaderContainer} pointerEvents="box-none">
-                  <RNAnimated.View
+              <View style={styles.floatingHeaderContainer} pointerEvents="none">
+                <RNAnimated.View
+                  style={[
+                    styles.floatingHeaderItem,
+                    {
+                      opacity: searchModeOpacity,
+                    },
+                  ]}
+                >
+                  <Text
                     style={[
-                      styles.floatingHeaderItem,
-                      {
-                        opacity: searchModeOpacity,
-                      },
+                      styles.floatingHeaderText,
+                      isDark
+                        ? styles.floatingHeaderTextDark
+                        : [styles.floatingHeaderTextLight, { color: theme.colors.primary.default }],
                     ]}
+                    numberOfLines={1}
                   >
-                    <Text
-                      style={[
-                        styles.floatingHeaderText,
-                        isDark ? styles.floatingHeaderTextDark : styles.floatingHeaderTextLight,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      Search
-                    </Text>
-                  </RNAnimated.View>
-                  <RNAnimated.View
+                    Search
+                  </Text>
+                </RNAnimated.View>
+                <RNAnimated.View
+                  style={[
+                    styles.floatingHeaderItem,
+                    styles.floatingHeaderItemAbsolute,
+                    {
+                      opacity: aiModeOpacity,
+                    },
+                  ]}
+                >
+                  <Text
                     style={[
-                      styles.floatingHeaderItem,
-                      styles.floatingHeaderItemAbsolute,
-                      {
-                        opacity: aiModeOpacity,
-                      },
+                      styles.floatingHeaderText,
+                      isDark
+                        ? styles.floatingHeaderTextDark
+                        : [styles.floatingHeaderTextLight, { color: theme.colors.primary.default }],
                     ]}
+                    numberOfLines={1}
                   >
-                    <Text
-                      style={[
-                        styles.floatingHeaderText,
-                        isDark ? styles.floatingHeaderTextDark : styles.floatingHeaderTextLight,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      Plan Your Itinerary
-                    </Text>
-                  </RNAnimated.View>
-                </View>
-              </GestureDetector>
-            )}
+                    Plan Your Itinerary
+                  </Text>
+                </RNAnimated.View>
+              </View>
+            ) : null}
           </View>
 
           {/* Main Row: Single GestureDetector wrapping the ENTIRE barRow */}
@@ -991,7 +1038,7 @@ export const DynamicBottomBar: React.FC = () => {
           pointerEvents={isExpanded ? 'auto' : 'none'}
         >
           {/* Sheet Top Drag Header Area (Zone 1 Handle) */}
-          <GestureDetector gesture={headerPanGesture}>
+          <GestureDetector gesture={handlePanGesture}>
             <View style={styles.sheetHandleArea}>
               <View style={[styles.handleBar, { backgroundColor: isDark ? '#4A443F' : '#DED8D1' }]} />
             </View>
@@ -1082,10 +1129,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   floatingHeaderTextLight: {
-    color: '#11100E',
-    textShadowColor: '#FFFFFF',
+    textShadowColor: 'rgba(255,255,255,0.95)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 8,
+    textShadowRadius: 6,
   },
   pillsScrollView: {
     flex: 1,
