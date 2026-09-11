@@ -13,11 +13,11 @@ import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 
 const QUICK_CATEGORIES = [
-  { id: '1', label: '🏰 Forts & Palaces', query: 'Historic Forts' },
-  { id: '2', label: '🌊 Lakes & Ghats', query: 'Scenic Lakes' },
-  { id: '3', label: '🍛 Local Cuisine', query: 'Food & Street Markets' },
-  { id: '4', label: '🛕 Ancient Temples', query: 'Heritage Temples' },
-  { id: '5', label: '🛍 Bazaars & Crafts', query: 'Handicraft Bazaars' },
+  { id: '1', label: ' Forts & Palaces', query: 'Historic Forts' },
+  { id: '2', label: ' Lakes & Ghats', query: 'Scenic Lakes' },
+  { id: '3', label: ' Local Cuisine', query: 'Food & Street Markets' },
+  { id: '4', label: ' Ancient Temples', query: 'Heritage Temples' },
+  { id: '5', label: ' Bazaars & Crafts', query: 'Handicraft Bazaars' },
 ];
 
 const POPULAR_DESTINATIONS = [
