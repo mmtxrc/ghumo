@@ -216,6 +216,7 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
 
       setCategorizedResults(categorized);
       setSearchResults(categorized.places);
+      setAiResponse(null);
       setActiveMapCategoryState('all');
 
       if (categorized.tips && categorized.tips.length > 0) {
@@ -262,6 +263,9 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
         attachments,
       });
       if (reqId !== currentAIRequestId.current) return; // Request was aborted/cancelled
+      setCategorizedResults(null);
+      setSearchResults([]);
+      setActiveMapCategoryState('day_0');
       setAiResponse(response);
       setStatusMessage(`Itinerary ready: ${response.title}`);
       setAiPrompt('');
@@ -272,8 +276,11 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       setIsMapVisible(true);
 
       // Auto-select first entry on carousel and map
-      if (response.recommended_places && response.recommended_places.length > 0) {
-        setSelectedPlaceId(`ai_p_0`);
+      if (
+        (response.recommended_places && response.recommended_places.length > 0) ||
+        (response.days && response.days.length > 0)
+      ) {
+        setSelectedPlaceId('ai_d0_p0');
       }
     } catch (err: any) {
       if (reqId === currentAIRequestId.current) {

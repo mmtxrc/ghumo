@@ -196,14 +196,6 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
         bounces={true}
         overScrollMode="always"
       >
-        {isProcessingAI && (
-          <View style={[styles.loadingCard, { backgroundColor: isDark ? '#24211E' : '#F7F2E9', borderColor: theme.colors.primary.default }]}>
-            <ActivityIndicator size="small" color={theme.colors.primary.default} />
-            <Text style={[styles.loadingText, { color: theme.colors.text.primary }]}>
-              Ghumo AI is curating your personalized travel itinerary...
-            </Text>
-          </View>
-        )}
 
         {/* Recent AI Prompts (Last 5 history items in one line - Press & Hold to preview full, Tap to execute) */}
         {!aiResponse && promptHistory && promptHistory.length > 0 && (

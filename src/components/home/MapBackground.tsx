@@ -10,41 +10,108 @@
  * - Auto camera framing (fitBounds & flyTo)
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 import { PlaceSearchResult } from '@/domain/models/search';
-import { SAMPLE_PLACES } from '@/data/sampleDatasets';
+import { resolvePlaceCoordinates } from '@/utils/geoUtils';
 
 export const MapBackground: React.FC = () => {
   const { isDark } = useTheme();
-  const { userLocation, searchResults, selectedPlaceId, setSelectedPlaceId } = useHome();
+  const {
+    userLocation,
+    searchResults,
+    categorizedResults,
+    activeMapCategory,
+    aiResponse,
+    selectedPlaceId,
+    setSelectedPlaceId,
+  } = useHome();
   const webViewRef = useRef<WebView>(null);
 
-  // Helper to extract coordinates from search results or fallback dataset lookup
-  const getMarkerCoordinates = (place: PlaceSearchResult): { lat: number; lng: number } | null => {
-    if (typeof place.lat === 'number' && typeof place.lng === 'number' && place.lat !== 0 && place.lng !== 0) {
-      return { lat: place.lat, lng: place.lng };
+  const activePlaces = useMemo(() => {
+    if (categorizedResults && categorizedResults.places.length > 0) {
+      let list = categorizedResults.places;
+      if (activeMapCategory === 'food') list = categorizedResults.food;
+      else if (activeMapCategory === 'markets') list = categorizedResults.markets;
+      else if (activeMapCategory === 'attractions') list = categorizedResults.attractions;
+      else if (activeMapCategory === 'hidden_gems') list = categorizedResults.hidden_gems;
+      return list.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category || p.city || 'Place',
+        rating: p.rating || p.feedback?.averageRating || 4.8,
+        lat: p.lat,
+        lng: p.lng,
+      }));
     }
 
-    const fallbackMatch = SAMPLE_PLACES.find(
-      (sp) => sp.name.toLowerCase() === place.name.toLowerCase() || place.name.toLowerCase().includes(sp.name.toLowerCase())
-    );
-    if (fallbackMatch && fallbackMatch.lat && fallbackMatch.lng) {
-      return { lat: fallbackMatch.lat, lng: fallbackMatch.lng };
+    if (searchResults.length > 0) {
+      let list = searchResults;
+      if (activeMapCategory === 'food') list = searchResults.filter((p) => p.type === 'food' || p.category?.toLowerCase().includes('food'));
+      else if (activeMapCategory === 'markets') list = searchResults.filter((p) => p.type === 'market' || p.category?.toLowerCase().includes('market'));
+      else if (activeMapCategory === 'attractions') list = searchResults.filter((p) => p.type === 'attraction' || (!p.type?.includes('food') && !p.type?.includes('market')));
+      return list.map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category || p.city || 'Place',
+        rating: p.rating || p.feedback?.averageRating || 4.8,
+        lat: p.lat,
+        lng: p.lng,
+      }));
     }
 
-    return null;
-  };
+    if (aiResponse) {
+      const places: { id: string; name: string; category?: string; rating?: number | null; lat?: number; lng?: number }[] = [];
+      const selectedDay = activeMapCategory && activeMapCategory.startsWith('day_')
+        ? parseInt(activeMapCategory.replace('day_', ''), 10)
+        : null;
 
-  const placePins = searchResults
-    .map((place) => {
-      const coords = getMarkerCoordinates(place);
-      return coords ? { place, coords } : null;
-    })
-    .filter((item): item is { place: PlaceSearchResult; coords: { lat: number; lng: number } } => item !== null);
+      if (aiResponse.days && aiResponse.days.length > 0) {
+        aiResponse.days.forEach((day, dIdx) => {
+          if (selectedDay === null || selectedDay === dIdx) {
+            (day.activities || day.places || []).forEach((act, actIdx) => {
+              places.push({
+                id: `ai_d${dIdx}_p${actIdx}`,
+                name: act.name || act.place || 'Stop',
+                category: `Day ${day.dayNumber || day.day || dIdx + 1}`,
+                rating: 4.8,
+                lat: act.lat,
+                lng: act.lng,
+              });
+            });
+          }
+        });
+      } else if (aiResponse.recommended_places && aiResponse.recommended_places.length > 0) {
+        aiResponse.recommended_places.forEach((p, idx) => {
+          places.push({
+            id: `ai_d0_p${idx}`,
+            name: p.name,
+            category: p.type === 'food' ? 'Food Stop' : (p.type || 'Highlight'),
+            rating: 4.8,
+            lat: p.lat,
+            lng: p.lng,
+          });
+        });
+      }
+
+      return places;
+    }
+
+    return [];
+  }, [categorizedResults, searchResults, aiResponse, activeMapCategory]);
+
+  const placePins = useMemo(() => {
+    const destinationContext = aiResponse?.location || aiResponse?.title || '';
+    return activePlaces
+      .map((place, idx) => {
+        const coords = resolvePlaceCoordinates(place, destinationContext, idx);
+        return coords ? { place, coords } : null;
+      })
+      .filter((item): item is { place: (typeof activePlaces)[0]; coords: { lat: number; lng: number } } => item !== null);
+  }, [activePlaces, aiResponse]);
 
   // Prepare map data payload for webview injection
   const mapData = {
@@ -53,8 +120,8 @@ export const MapBackground: React.FC = () => {
     pins: placePins.map((p) => ({
       id: p.place.id,
       name: p.place.name,
-      category: p.place.category || p.place.city || 'Destination',
-      rating: p.place.rating || p.place.feedback?.averageRating || null,
+      category: p.place.category || 'Destination',
+      rating: p.place.rating || null,
       lat: p.coords.lat,
       lng: p.coords.lng,
     })),
@@ -66,7 +133,7 @@ export const MapBackground: React.FC = () => {
     if (!webViewRef.current) return;
     const jsCode = `if (window.updateGhumoMap) { window.updateGhumoMap(${JSON.stringify(mapData)}); } true;`;
     webViewRef.current.injectJavaScript(jsCode);
-  }, [userLocation, searchResults, isDark, selectedPlaceId]);
+  }, [userLocation, activePlaces, placePins, isDark, selectedPlaceId]);
 
   const initialLat = userLocation?.latitude || 28.6139;
   const initialLng = userLocation?.longitude || 77.2090;
@@ -234,25 +301,29 @@ export const MapBackground: React.FC = () => {
       }
 
       // Camera centering & zoom behavior:
-      // 1. If a place on the carousel is clicked/selected -> smoothly pan and zoom in to zoom level 16
-      // 2. If cross clicked (selectedPlaceId is null) -> smoothly pan and zoom back to user's current location
+      // 1. If a place on the carousel is clicked/selected -> smoothly pan and zoom in to zoom level 15
+      // 2. If pins exist without a specific selected pin -> frame all place pins
+      // 3. If no search/itinerary pins exist -> smoothly pan back to user's current location
       if (data.selectedPlaceId && data.pins && data.pins.length > 0) {
         var activePin = data.pins.find(function(p) { return p.id === data.selectedPlaceId; });
         if (activePin) {
-          map.setView([activePin.lat, activePin.lng], 16, { animate: true });
+          map.setView([activePin.lat, activePin.lng], 15, { animate: true });
           if (selectedMarker) {
             selectedMarker.openPopup();
           }
+        }
+      } else if (data.pins && data.pins.length > 0) {
+        var pinPoints = data.pins.map(function(p) { return [p.lat, p.lng]; });
+        if (pinPoints.length > 1) {
+          map.fitBounds(pinPoints, { padding: [50, 50], maxZoom: 15 });
+        } else if (pinPoints.length === 1) {
+          map.setView(pinPoints[0], 15, { animate: true });
         }
       } else if (data.userLocation) {
         map.setView([data.userLocation.latitude, data.userLocation.longitude], 15, { animate: true });
         if (userMarker) {
           userMarker.openPopup();
         }
-      } else if (boundsPoints.length > 1) {
-        map.fitBounds(boundsPoints, { padding: [50, 50], maxZoom: 15 });
-      } else if (boundsPoints.length === 1) {
-        map.setView(boundsPoints[0], 14, { animate: true });
       }
     };
 

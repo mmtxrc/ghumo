@@ -105,13 +105,15 @@ export const DynamicBottomBar: React.FC = () => {
     } else if (searchResults.length > 0) {
       pills.push({ id: 'all', label: `📍 All Places (${searchResults.length})` });
     } else if (aiResponse) {
-      pills.push({ id: 'all', label: `🗺️ Itinerary Places` });
-      if (aiResponse.recommended_places && aiResponse.recommended_places.length > 0) {
-        pills.push({ id: 'food', label: `🍲 Food Spots` });
-        pills.push({ id: 'attractions', label: `📍 Highlights` });
-      }
-      if (aiResponse.tips && aiResponse.tips.length > 0) {
-        pills.push({ id: 'tips', label: `💡 Tips (${aiResponse.tips.length})` });
+      if (aiResponse.days && aiResponse.days.length > 0) {
+        aiResponse.days.forEach((day, idx) => {
+          pills.push({
+            id: `day_${idx}`,
+            label: `📅 Day ${day.dayNumber || day.day || idx + 1}`,
+          });
+        });
+      } else {
+        pills.push({ id: 'day_0', label: '📅 Day 1' });
       }
     }
 
@@ -255,8 +257,8 @@ export const DynamicBottomBar: React.FC = () => {
     setIsExpanded(false);
     setIsAttachmentPickerOpen(false);
     const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-    sheetTranslateY.value = withTiming(currentHeight + 50, { duration: 200 });
-    dragProgress.value = withTiming(0, { duration: 200 });
+    sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 220 });
+    dragProgress.value = withTiming(0, { duration: 220 });
   }, [setIsExpanded, isAttachmentPickerOpen, dragProgress, sheetTranslateY, ATTACHMENT_PICKER_HEIGHT, expandedOverlayHeight]);
 
   const animateTo = useCallback(
@@ -272,13 +274,13 @@ export const DynamicBottomBar: React.FC = () => {
 
   // Sync isExpanded state if changed externally
   useEffect(() => {
+    const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
     if (isExpanded) {
       dragProgress.value = withSpring(1, { damping: 24, stiffness: 240, mass: 0.8 });
       sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 240, mass: 0.8 });
     } else {
-      const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-      sheetTranslateY.value = withTiming(currentHeight + 50, { duration: 200 });
-      dragProgress.value = withTiming(0, { duration: 200 });
+      sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 220 });
+      dragProgress.value = withTiming(0, { duration: 220 });
     }
   }, [isExpanded, isAttachmentPickerOpen, dragProgress, sheetTranslateY, ATTACHMENT_PICKER_HEIGHT, expandedOverlayHeight]);
 
@@ -366,26 +368,29 @@ export const DynamicBottomBar: React.FC = () => {
   // Map button: Expands downwards, action button contracts from top by the same amount, with icon fade
   const handleToggleMap = () => {
     mapExpandAnim.setValue(14);
+    mapExpandAnim.setValue(18);
     RNAnimated.spring(mapExpandAnim, {
       toValue: 0,
-      damping: 14,
-      stiffness: 280,
-      mass: 0.65,
+      damping: 15,
+      stiffness: 260,
+      mass: 0.7,
       useNativeDriver: false,
     }).start();
 
-    RNAnimated.timing(mapIconFadeAnim, {
-      toValue: 0,
-      duration: 70,
-      useNativeDriver: false,
-    }).start(() => {
-      toggleMapVisible();
+    RNAnimated.sequence([
+      RNAnimated.timing(mapIconFadeAnim, {
+        toValue: 0.15,
+        duration: 70,
+        useNativeDriver: true,
+      }),
       RNAnimated.timing(mapIconFadeAnim, {
         toValue: 1,
-        duration: 110,
-        useNativeDriver: false,
-      }).start();
-    });
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    toggleMapVisible();
   };
 
   // Trigger expansion into attachment picker view
@@ -421,7 +426,7 @@ export const DynamicBottomBar: React.FC = () => {
       'worklet';
       if (event.translationY > 60 || event.velocityY > 250) {
         const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-        sheetTranslateY.value = withTiming(currentHeight + 50, { duration: 200 });
+        sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 200 });
         dragProgress.value = withTiming(0, { duration: 200 }, (finished) => {
           if (finished) {
             runOnJS(closeSheet)();
@@ -466,31 +471,46 @@ export const DynamicBottomBar: React.FC = () => {
   // Reanimated Animated Styles for buttery-smooth 60/120fps UI Thread Rendering
   const expandedSheetAnimatedStyle = useAnimatedStyle(() => {
     const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-    const transY = isExpanded
-      ? sheetTranslateY.value
-      : interpolate(dragProgress.value, [0, 1], [currentHeight + 50, 0], Extrapolation.CLAMP);
-
-    const opacity = interpolate(dragProgress.value, [0, 0.05, 1], [0, 1, 1], Extrapolation.CLAMP);
+    const progress = interpolate(
+      sheetTranslateY.value,
+      [currentHeight + 50, 0],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
+    const opacity = interpolate(progress, [0, 0.05, 1], [0, 1, 1], Extrapolation.CLAMP);
 
     return {
-      transform: [{ translateY: transY }],
+      transform: [{ translateY: sheetTranslateY.value }],
       opacity,
+      display: sheetTranslateY.value >= currentHeight + 40 ? 'none' : 'flex',
     };
   });
 
   const scrimAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(dragProgress.value, [0, 1], [0, 0.45], Extrapolation.CLAMP);
+    const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+    const progress = interpolate(
+      sheetTranslateY.value,
+      [currentHeight + 50, 0],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
     return {
-      opacity,
+      opacity: interpolate(progress, [0, 1], [0, 0.45], Extrapolation.CLAMP),
+      display: progress <= 0.01 ? 'none' : 'flex',
     };
   });
 
   const restingBarAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(dragProgress.value, [0, 0.25], [1, 0], Extrapolation.CLAMP);
-    const transY = interpolate(dragProgress.value, [0, 1], [0, 30], Extrapolation.CLAMP);
+    const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+    const progress = interpolate(
+      sheetTranslateY.value,
+      [currentHeight + 50, 0],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
     return {
-      opacity,
-      transform: [{ translateY: transY }],
+      opacity: interpolate(progress, [0, 0.25], [1, 0], Extrapolation.CLAMP),
+      transform: [{ translateY: interpolate(progress, [0, 1], [0, 30], Extrapolation.CLAMP) }],
     };
   });
 

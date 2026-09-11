@@ -305,6 +305,217 @@ export const SAMPLE_ITINERARIES: ItineraryItem[] = [
       },
     ],
   },
+  {
+    id: 'itin_jaipur_royal_heritage',
+    title: '3-Day Royal Heritage & Food in Jaipur',
+    location: 'Jaipur, Rajasthan',
+    budget: '₹6,500 Total Budget (Forts + Dining + Transport)',
+    summary: 'A curated 3-day royal heritage journey through the Pink City exploring hill forts, palace courtyards, traditional Rajasthani thalis, and bustling bazaars.',
+    days: [
+      {
+        dayNumber: 1,
+        title: 'Hill Forts & Sunsets',
+        places: [
+          {
+            time: '09:00 AM',
+            name: 'Amer Fort (Sheesh Mahal)',
+            description: 'Explore the grand Mughal-Rajput fortress, the mirror palace Sheesh Mahal, and panoramic views of Maota Lake.',
+          },
+          {
+            time: '11:30 AM',
+            name: 'Jaigarh Fort',
+            description: 'Witness the colossal Jaivana cannon on wheels and walk along the ancient hilltop defense walls.',
+          },
+          {
+            time: '01:30 PM',
+            name: 'Rajasthani Thali at LMB',
+            description: 'Authentic Dal Baati Churma, Gatte ki Sabzi, and Ker Sangri in the heart of Johari Bazaar.',
+          },
+          {
+            time: '03:30 PM',
+            name: 'Jal Mahal (Water Palace)',
+            description: 'Scenic photo stop at the picturesque yellow sandstone palace floating peacefully in Man Sagar Lake.',
+          },
+          {
+            time: '05:30 PM',
+            name: 'Sunset at Nahargarh Fort',
+            description: 'Breathtaking golden hour panorama over the entire Pink City skyline from the fortress edge.',
+          },
+        ],
+      },
+      {
+        dayNumber: 2,
+        title: 'Palaces & Bazaars',
+        places: [
+          {
+            time: '09:30 AM',
+            name: 'City Palace Jaipur',
+            description: 'Marvel at the royal courtyards, Maharaja museum, and the iconic Peacock Gate (Mor Chowk).',
+          },
+          {
+            time: '11:30 AM',
+            name: 'Jantar Mantar Observatory',
+            description: 'UNESCO World Heritage astronomical complex featuring the world’s largest stone sundial.',
+          },
+          {
+            time: '01:00 PM',
+            name: 'Legendary Lassiwala (MI Road)',
+            description: 'Cool off with thick, creamy malai lassi served in traditional eco-friendly clay kulhads.',
+          },
+          {
+            time: '03:00 PM',
+            name: 'Hawa Mahal (Palace of Winds)',
+            description: 'Iconic pink facade with 953 ornate honeycomb windows designed for royal breezes.',
+          },
+          {
+            time: '05:00 PM',
+            name: 'Johari & Bapu Bazaar',
+            description: 'Shop for Jaipuri bandhani sarees, handcrafted gemstone jewelry, and camel-leather juttis.',
+          },
+        ],
+      },
+      {
+        dayNumber: 3,
+        title: 'Arts & Village Feast',
+        places: [
+          {
+            time: '10:00 AM',
+            name: 'Albert Hall Museum',
+            description: 'Magnificent Indo-Saracenic museum housing royal artifacts, miniature paintings, and rare carpets.',
+          },
+          {
+            time: '12:30 PM',
+            name: 'Rawat Mishthan Bhandar',
+            description: 'Taste the world-famous piping hot crispy Pyaaz Kachori and sweet Mawa Kachori.',
+          },
+          {
+            time: '03:00 PM',
+            name: 'Birla Mandir Jaipur',
+            description: 'Peaceful white marble temple dedicated to Lord Vishnu and Goddess Lakshmi nestled below Moti Dungri.',
+          },
+          {
+            time: '06:00 PM',
+            name: 'Chokhi Dhani Cultural Resort',
+            description: 'Immersive Rajasthani village experience with folk music, fire dancers, puppet shows, and a royal feast.',
+          },
+        ],
+      },
+    ],
+    tips: [
+      'Get the Jaipur Composite Entry Ticket to save 50% across Amer, Albert Hall, Nahargarh, and Jantar Mantar.',
+      'Visit Hawa Mahal from across the street cafe for the ultimate front-elevation photo.',
+      'Bargain politely in Bapu Bazaar for handicrafts and leather mojaris.',
+    ],
+    recommendedPlaces: [
+      { name: 'Amer Fort', reason: 'Magnificent mirror palace and hill views', type: 'attraction' },
+      { name: 'City Palace', reason: 'Royal residence & museum', type: 'attraction' },
+      { name: 'Lassiwala', reason: 'Iconic 1944 earthen kulhad lassi', type: 'food' },
+      { name: 'Nahargarh Fort', reason: 'Epic sunset viewpoint over Pink City', type: 'attraction' },
+      { name: 'Rawat Mishthan Bhandar', reason: 'Legendary crispy Pyaaz Kachori', type: 'food' },
+    ],
+  },
+  {
+    id: 'itin_udaipur_lakeside',
+    title: '3-Day Lakeside Cafes & Sunsets in Udaipur',
+    location: 'Udaipur, Rajasthan',
+    budget: '₹7,500 Total Budget (Boats + Cafes + Palaces)',
+    summary: 'A scenic 3-day romantic and relaxing itinerary enjoying lakeside dining, palace architecture, sunset boat rides, and cultural dance shows in the City of Lakes.',
+    days: [
+      {
+        dayNumber: 1,
+        title: 'Lakeside Heritage & Sunset Cruise',
+        places: [
+          {
+            time: '09:30 AM',
+            name: 'City Palace Udaipur',
+            description: 'Grand palace complex overlooking Lake Pichola with crystal gallery and marble balconies.',
+          },
+          {
+            time: '12:30 PM',
+            name: 'Jagdish Temple',
+            description: 'Ancient 1651 AD Indo-Aryan temple with intricate stone carvings right outside the palace gate.',
+          },
+          {
+            time: '02:00 PM',
+            name: 'Ambrai Lakeside Cafe',
+            description: 'Scenic waterfront lunch with picture-perfect views of City Palace and Lake Pichola.',
+          },
+          {
+            time: '05:00 PM',
+            name: 'Lake Pichola Boat Cruise',
+            description: 'Magical golden hour boat ride drifting past the floating Lake Palace and Jagmandir.',
+          },
+          {
+            time: '07:00 PM',
+            name: 'Bagore Ki Haveli Folk Show',
+            description: 'Evening Dharohar cultural performance featuring Rajasthani folk dances and puppet theater.',
+          },
+        ],
+      },
+      {
+        dayNumber: 2,
+        title: 'Gardens, Lakes & Hilltop Forts',
+        places: [
+          {
+            time: '10:00 AM',
+            name: 'Saheliyon-ki-Bari',
+            description: 'Historic royal garden with lotus pools, marble pavilions, and cascading fountains.',
+          },
+          {
+            time: '01:00 PM',
+            name: 'Fatehsagar Lake & Cafe',
+            description: 'Breezy lakeside walk and cold coffee along the scenic Fatehsagar promenade.',
+          },
+          {
+            time: '04:30 PM',
+            name: 'Monsoon Palace (Sajjangarh)',
+            description: 'Hilltop fortress offering dramatic 360-degree sunset views of the Aravalli hills and lakes.',
+          },
+          {
+            time: '07:30 PM',
+            name: 'Upre Rooftop Dining',
+            description: 'Romantic candlelit dinner with illuminated views of the City Palace across the lake.',
+          },
+        ],
+      },
+      {
+        dayNumber: 3,
+        title: 'Island Palaces & Art Bazaars',
+        places: [
+          {
+            time: '09:30 AM',
+            name: 'Jagmandir Island Palace',
+            description: 'Historic island palace garden retreat surrounded by sparkling lake waters.',
+          },
+          {
+            time: '12:30 PM',
+            name: 'Shilpgram Rural Arts Complex',
+            description: 'Living ethnographic craft village showcasing rural artisans, pottery, and weaving.',
+          },
+          {
+            time: '03:30 PM',
+            name: 'Hathipole Art Bazaar',
+            description: 'Shop for authentic Pichwai paintings, silver ornaments, and wooden handicrafts.',
+          },
+          {
+            time: '06:00 PM',
+            name: 'Gangaur Ghat Stroll',
+            description: 'Peaceful waterfront ghat steps to soak in the evening breeze and gentle temple bells.',
+          },
+        ],
+      },
+    ],
+    tips: [
+      'Book the Bagore Ki Haveli Dharohar dance tickets in advance at 5 PM for the 7 PM show.',
+      'Take the Lake Pichola boat ride from Rameshwar Ghat for best seating.',
+    ],
+    recommendedPlaces: [
+      { name: 'City Palace Udaipur', reason: 'Grandest palace complex in Rajasthan', type: 'attraction' },
+      { name: 'Ambrai Ghat', reason: 'Most scenic waterfront cafe view', type: 'food' },
+      { name: 'Lake Pichola', reason: 'Serene sunset boat ride', type: 'attraction' },
+      { name: 'Monsoon Palace', reason: 'Hilltop castle sunset views', type: 'attraction' },
+    ],
+  },
 ];
 
 /**
@@ -331,7 +542,15 @@ export function querySamplePlaces(query: string): PlaceItem[] {
 export function querySampleItinerary(prompt: string): ItineraryItem {
   const p = prompt.trim().toLowerCase();
 
-  if (p.includes('food') || p.includes('samosa') || p.includes('chaat') || p.includes('street')) {
+  if (p.includes('jaipur') || p.includes('royal') || p.includes('heritage') || p.includes('fort')) {
+    return SAMPLE_ITINERARIES[2];
+  }
+
+  if (p.includes('udaipur') || p.includes('lake') || p.includes('cafe') || p.includes('sunset')) {
+    return SAMPLE_ITINERARIES[3];
+  }
+
+  if (p.includes('samosa') || p.includes('chaat') || p.includes('food trail') || p.includes('chandni')) {
     return SAMPLE_ITINERARIES[1];
   }
 
