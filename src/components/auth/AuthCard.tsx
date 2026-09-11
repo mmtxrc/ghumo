@@ -40,36 +40,24 @@ export const AuthCard: React.FC = () => {
     if (newMode === mode) return;
 
     clearError();
-    const isGoingToSignUp = newMode === 'signup';
+    setMode(newMode);
+
+    // Instant snappy transition without spring bounce
+    fadeAnim.setValue(0.35);
+    slideAnim.setValue(newMode === 'signup' ? 10 : -10);
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 90,
+        toValue: 1,
+        duration: 130,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
-        toValue: isGoingToSignUp ? -15 : 15,
-        duration: 90,
+        toValue: 0,
+        duration: 150,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      setMode(newMode);
-      slideAnim.setValue(isGoingToSignUp ? 15 : -15);
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 160,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          damping: 18,
-          stiffness: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
+    ]).start();
   };
 
   const handleEmailSubmit = async () => {

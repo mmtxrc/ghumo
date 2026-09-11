@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image as RNImage, Platform, ActivityIndicator, Animated } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 
 export const HomeFeedResults: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const {
     suggestions,
@@ -52,11 +54,15 @@ export const HomeFeedResults: React.FC = () => {
     return null;
   }
 
+  // Dynamic top offset positioned safely below the floating HomeTopBar pill with increased margin
+  const topOffset = (insets.top > 0 ? insets.top : 24) + (Platform.OS === 'android' ? 82 : 76);
+
   return (
     <View
       style={[
         styles.container,
         {
+          top: topOffset,
           backgroundColor: isDark ? 'rgba(27,26,24,0.95)' : 'rgba(255,253,249,0.95)',
           borderColor: theme.colors.border.default,
         },
@@ -64,7 +70,7 @@ export const HomeFeedResults: React.FC = () => {
     >
       {/* Header Row */}
       <View style={styles.headerRow}>
-        <Text style={[styles.statusText, { color: theme.colors.text.primary }]}>
+        <Text style={[styles.statusText, { color: theme.colors.text.primary }]} numberOfLines={1}>
           {statusMessage ||
             (isSearching
               ? 'Searching places across map layers...'
@@ -75,8 +81,14 @@ export const HomeFeedResults: React.FC = () => {
               : 'Ghumo Discovery')}
         </Text>
         {(hasSearchOrAi || isLoading) && (
-          <TouchableOpacity onPress={clearResults} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={[styles.closeText, { color: theme.colors.text.muted }]}>✕</Text>
+          <TouchableOpacity
+            onPress={clearResults}
+            style={[styles.closeButton, { backgroundColor: isDark ? '#2E2B27' : '#EFE8DE' }]}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Close results"
+          >
+            <Text style={[styles.closeText, { color: theme.colors.text.secondary }]}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -353,7 +365,6 @@ export const HomeFeedResults: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 90,
     left: 16,
     right: 16,
     maxWidth: 440,
@@ -375,6 +386,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: 8,
+    gap: 10,
+  },
+  closeButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingContainer: {
     paddingVertical: 12,

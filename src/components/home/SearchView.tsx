@@ -11,8 +11,8 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
 } from 'react-native';
+import { ScrollView, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
@@ -28,9 +28,10 @@ const QUICK_CATEGORIES = [
 
 interface SearchViewProps {
   onClose: () => void;
+  headerGesture?: PanGesture;
 }
 
-export const SearchView: React.FC<SearchViewProps> = ({ onClose }) => {
+export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }) => {
   const { theme, isDark } = useTheme();
   const {
     searchQuery,
@@ -58,8 +59,9 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose }) => {
     submitAIPrompt(item.summary);
   };
 
-  return (
-    <View style={styles.container}>
+  // Header Zone 1 (Title, Close button, Search box)
+  const headerContent = (
+    <View style={styles.zone1HeaderArea}>
       {/* Header Row: Title + Close Button */}
       <View style={styles.headerRow}>
         <View style={styles.headerTitleRow}>
@@ -117,12 +119,29 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose }) => {
           </TouchableOpacity>
         )}
       </View>
+    </View>
+  );
 
-      {/* Quick Category Chips */}
+  return (
+    <View style={styles.container}>
+      {/* Zone 1: Header / Non-scrollable sheet drag area */}
+      {headerGesture ? (
+        <GestureDetector gesture={headerGesture}>
+          {headerContent}
+        </GestureDetector>
+      ) : (
+        headerContent
+      )}
+
+      {/* Zone 2: Horizontal Quick Category Chips */}
       <View style={styles.categorySection}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          directionalLockEnabled={true}
           contentContainerStyle={styles.categoryContainer}
         >
           {QUICK_CATEGORIES.map((cat) => (
@@ -149,11 +168,17 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose }) => {
         </ScrollView>
       </View>
 
-      {/* Scrollable Content: Travel Planner Inspirations + Search Results */}
+      {/* Zone 3: Main Scrollable Content (Travel Inspirations + Search Results) */}
       <ScrollView
         style={styles.contentScroll}
-        contentContainerStyle={styles.contentInner}
+        contentContainerStyle={[styles.contentInner, { flexGrow: 1 }]}
         showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEventThrottle={16}
+        bounces={true}
+        overScrollMode="always"
       >
         {/* Live Search Results if Available */}
         {searchResults.length > 0 ? (
@@ -221,7 +246,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose }) => {
         <View style={styles.plannerSection}>
           <View style={styles.plannerHeaderRow}>
             <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
-              ✨ Ghumo AI Travel Planner
+              Ghumo AI Travel Planner
             </Text>
             <Text style={[styles.subLabel, { color: theme.colors.text.muted }]}>
               Starter Trip Inspirations
@@ -328,12 +353,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 4,
   },
+  zone1HeaderArea: {
+    width: '100%',
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 10,
+    marginTop: 16,
   },
   headerTitleRow: {
     flexDirection: 'row',

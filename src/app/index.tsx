@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useAuth } from '@/context/authContext';
 import { useTheme } from '@/context/themeContext';
+import { useHome } from '@/context/homeContext';
 import { logger } from '@/utils/logger';
 import { BrandHeader } from '@/components/auth/BrandHeader';
 import { AuthCard } from '@/components/auth/AuthCard';
@@ -24,28 +25,30 @@ import { HomeFeedResults } from '@/components/home/HomeFeedResults';
 export default function HomeScreen() {
   const { isAuthenticated, isGuest } = useAuth();
   const { theme, isDark, fadeAnim } = useTheme();
+  const { isMapVisible } = useHome();
 
   useEffect(() => {
-    logger.app('HomeScreen active state', { isAuthenticated, isGuest });
-  }, [isAuthenticated, isGuest]);
+    logger.app('HomeScreen active state', { isAuthenticated, isGuest, isMapVisible });
+  }, [isAuthenticated, isGuest, isMapVisible]);
 
   // If user is not logged in and has not skipped login -> render Revamped Auth Screen
   if (!isAuthenticated && !isGuest) {
+    const authBg = isDark ? '#191816' : '#ECE8E1';
     return (
-      <Animated.View style={[styles.screenRoot, { backgroundColor: theme.colors.background.hero, opacity: fadeAnim }]}>
+      <Animated.View style={[styles.screenRoot, { backgroundColor: authBg, opacity: fadeAnim }]}>
         <StatusBar
-          barStyle="light-content"
-          backgroundColor={theme.colors.background.hero}
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={authBg}
         />
-        <SafeAreaView style={[styles.topSafeArea, { backgroundColor: theme.colors.background.hero }]} />
+        <SafeAreaView style={[styles.topSafeArea, { backgroundColor: authBg }]} />
 
         <KeyboardAvoidingView
           enabled={Platform.OS === 'ios'}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={[styles.keyboardAvoid, { backgroundColor: theme.colors.background.screen }]}
+          style={[styles.keyboardAvoid, { backgroundColor: authBg }]}
         >
           <ScrollView
-            contentContainerStyle={[styles.scrollContent, { backgroundColor: theme.colors.background.screen }]}
+            contentContainerStyle={[styles.scrollContent, { backgroundColor: authBg }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="none"
@@ -53,13 +56,13 @@ export default function HomeScreen() {
             removeClippedSubviews={false}
             bounces={false}
           >
-            {/* Top Brand Header Area matching Card Width & Theme Hero Background */}
-            <View style={[styles.heroSection, { backgroundColor: theme.colors.background.hero }]}>
+            {/* Top Brand Header Area matching Card Width & Theme Background */}
+            <View style={[styles.heroSection, { backgroundColor: authBg }]}>
               <BrandHeader />
             </View>
 
             {/* Warm Ivory / Dark Charcoal Auth Card */}
-            <View style={[styles.cardSection, { backgroundColor: theme.colors.background.screen }]}>
+            <View style={[styles.cardSection, { backgroundColor: authBg }]}>
               <AuthCard />
             </View>
           </ScrollView>
@@ -77,8 +80,8 @@ export default function HomeScreen() {
         backgroundColor={theme.colors.background.screen}
       />
 
-      {/* Layer 1: Background Map View Placeholder (prepared for MapView in next step) */}
-      <MapBackground />
+      {/* Layer 1: Background Map View or Center Ghumo Logo */}
+      {isMapVisible ? <MapBackground /> : <GhumoCenterBrand />}
 
       {/* Layer 2: Floating Top App Bar */}
       <HomeTopBar />
@@ -86,10 +89,10 @@ export default function HomeScreen() {
       {/* Layer 3: Search & AI Results Card (when active) */}
       <HomeFeedResults />
 
-      {/* Layer 5: Dynamic Morphing Bottom Bar (AI + Search) */}
+      {/* Layer 4: Dynamic Morphing Bottom Bar (AI + Search + Floating Map Toggle) */}
       <DynamicBottomBar />
 
-      {/* Layer 6: Auth Action Loading Overlay */}
+      {/* Layer 5: Auth Action Loading Overlay */}
       <AuthLoadingOverlay />
     </Animated.View>
   );
@@ -107,19 +110,22 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
   },
   heroSection: {
     width: '100%',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     paddingHorizontal: 0,
-    paddingTop: 12,
+    paddingTop: 0,
     paddingBottom: 0,
   },
   cardSection: {
     width: '100%',
     paddingHorizontal: 16,
-    paddingBottom: 32,
+    paddingBottom: 16,
     alignItems: 'center',
   },
   homeRoot: {

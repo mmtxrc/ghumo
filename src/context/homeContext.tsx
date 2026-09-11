@@ -3,7 +3,7 @@
  * Orchestrates Search, AI Prompt interactions, Live Suggestions, and Rating Feedback.
  */
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import * as Location from 'expo-location';
 import { PlaceSearchResult, ISearchService, HiddenGemItem, TravelTipItem, NearbyPoiItem } from '@/domain/models/search';
 import { AttachmentItem, AIPromptResponse, IAIService } from '@/domain/models/ai';
@@ -36,6 +36,9 @@ interface HomeContextType {
   statusMessage: string | null;
   userLocation: UserLocation | null;
   selectedPlaceId: string | null;
+  isMapVisible: boolean;
+  setIsMapVisible: (visible: boolean | ((prev: boolean) => boolean)) => void;
+  toggleMapVisible: () => void;
   setActiveMode: (mode: HomeInteractionMode) => void;
   setIsExpanded: (expanded: boolean) => void;
   toggleExpanded: () => void;
@@ -84,7 +87,12 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [isMapVisible, setIsMapVisible] = useState<boolean>(true);
 
+  const currentSearchRequestId = useRef(0);
+  const currentAIRequestId = useRef(0);
+
+  const toggleMapVisible = () => setIsMapVisible((prev) => !prev);
   const toggleExpanded = () => setIsExpanded((prev) => !prev);
   const clearSearchQuery = () => setSearchQuery('');
   const clearAiPrompt = () => setAiPrompt('');
@@ -98,6 +106,11 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
   };
 
   const clearResults = () => {
+    // Invalidate and cancel any in-flight async search or AI requests
+    currentSearchRequestId.current += 1;
+    currentAIRequestId.current += 1;
+    setIsSearching(false);
+    setIsProcessingAI(false);
     setSearchResults([]);
     setAiResponse(null);
     setHiddenGems([]);
@@ -152,10 +165,12 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     const q = (queryToSearch !== undefined ? queryToSearch : searchQuery).trim();
     if (!q) return;
 
+    const reqId = ++currentSearchRequestId.current;
     setIsSearching(true);
     setStatusMessage(`Searching "${q}" across map layers...`);
     try {
       const results = await searchService.searchPlaces(q);
+      if (reqId !== currentSearchRequestId.current) return; // Request was aborted/cancelled
       setSearchResults(results);
 
       // Extract chained data if present on the primary result item
@@ -173,9 +188,13 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
 
       setStatusMessage(results.length > 0 ? `Found ${results.length} places for "${q}"` : 'No places found');
     } catch (err: any) {
-      setStatusMessage('Search error: Could not fetch places');
+      if (reqId === currentSearchRequestId.current) {
+        setStatusMessage('Search error: Could not fetch places');
+      }
     } finally {
-      setIsSearching(false);
+      if (reqId === currentSearchRequestId.current) {
+        setIsSearching(false);
+      }
     }
   };
 
@@ -183,6 +202,7 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
     const p = (promptToSubmit !== undefined ? promptToSubmit : aiPrompt).trim();
     if (!p) return;
 
+    const reqId = ++currentAIRequestId.current;
     setIsProcessingAI(true);
     setStatusMessage('Ghumo AI is crafting your travel itinerary...');
     try {
@@ -190,14 +210,19 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
         prompt: p,
         attachments,
       });
+      if (reqId !== currentAIRequestId.current) return; // Request was aborted/cancelled
       setAiResponse(response);
       setStatusMessage(`Itinerary ready: ${response.title}`);
       setAiPrompt('');
       setAttachments([]);
     } catch (err: any) {
-      setStatusMessage('AI Generation error: Please try again');
+      if (reqId === currentAIRequestId.current) {
+        setStatusMessage('AI Generation error: Please try again');
+      }
     } finally {
-      setIsProcessingAI(false);
+      if (reqId === currentAIRequestId.current) {
+        setIsProcessingAI(false);
+      }
     }
   };
 
@@ -267,6 +292,9 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       statusMessage,
       userLocation,
       selectedPlaceId,
+      isMapVisible,
+      setIsMapVisible,
+      toggleMapVisible,
       setActiveMode,
       setIsExpanded,
       toggleExpanded,
@@ -302,6 +330,7 @@ export const HomeProvider: React.FC<HomeProviderProps> = ({
       statusMessage,
       userLocation,
       selectedPlaceId,
+      isMapVisible,
     ]
   );
 

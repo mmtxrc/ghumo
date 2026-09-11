@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 import { useTheme } from '@/context/themeContext';
 import { AttachmentItem } from '@/domain/models/ai';
@@ -17,16 +18,18 @@ import { AttachmentItem } from '@/domain/models/ai';
 interface AttachmentPickerViewProps {
   onClose: () => void;
   onSelect: (type: AttachmentItem['type'], name: string) => void;
+  headerGesture?: PanGesture;
 }
 
 export const AttachmentPickerView: React.FC<AttachmentPickerViewProps> = ({
   onClose,
   onSelect,
+  headerGesture,
 }) => {
   const { theme, isDark } = useTheme();
 
-  return (
-    <View style={styles.container}>
+  const headerContent = (
+    <View style={styles.headerArea}>
       {/* Header Row with Title + Close '✕' button */}
       <View style={styles.headerRow}>
         <View style={styles.headerTitleRow}>
@@ -47,6 +50,18 @@ export const AttachmentPickerView: React.FC<AttachmentPickerViewProps> = ({
       <Text style={[styles.sectionSubtitle, { color: theme.colors.text.muted }]}>
         Choose content or media to enrich your AI travel request
       </Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      {headerGesture ? (
+        <GestureDetector gesture={headerGesture}>
+          {headerContent}
+        </GestureDetector>
+      ) : (
+        headerContent
+      )}
 
       {/* Options List */}
       <View style={styles.optionsList}>
@@ -147,6 +162,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 10,
+  },
+  headerArea: {
+    width: '100%',
   },
   headerRow: {
     flexDirection: 'row',

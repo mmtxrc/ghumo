@@ -11,9 +11,9 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { ScrollView, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Path, Line } from 'react-native-svg';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
@@ -29,9 +29,10 @@ const STARTER_PROMPTS = [
 
 interface PromptViewProps {
   onClose: () => void;
+  headerGesture?: PanGesture;
 }
 
-export const PromptView: React.FC<PromptViewProps> = ({ onClose }) => {
+export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }) => {
   const { theme, isDark } = useTheme();
   const {
     aiPrompt,
@@ -53,13 +54,14 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose }) => {
     }
   };
 
-  return (
-    <View style={styles.container}>
+  // Header Zone 1 (Title, Close button, Input box, Attachments)
+  const headerContent = (
+    <View style={styles.zone1HeaderArea}>
       {/* Header Row */}
       <View style={styles.headerRow}>
         <View style={styles.headerTitleRow}>
           <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>
-            ✨ Ghumo AI Travel Planner
+            Ghumo AI Travel Planner
           </Text>
         </View>
         <TouchableOpacity
@@ -160,12 +162,31 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose }) => {
           ))}
         </View>
       )}
+    </View>
+  );
 
-      {/* Scrollable Content: Generated Itinerary or Starter Inspirations */}
+  return (
+    <View style={styles.container}>
+      {/* Zone 1: Header / Non-scrollable sheet drag area */}
+      {headerGesture ? (
+        <GestureDetector gesture={headerGesture}>
+          {headerContent}
+        </GestureDetector>
+      ) : (
+        headerContent
+      )}
+
+      {/* Zone 3: Main Scrollable Content: Generated Itinerary or Starter Inspirations */}
       <ScrollView
         style={styles.contentScroll}
-        contentContainerStyle={styles.contentInner}
+        contentContainerStyle={[styles.contentInner, { flexGrow: 1 }]}
         showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEventThrottle={16}
+        bounces={true}
+        overScrollMode="always"
       >
         {isProcessingAI && (
           <View style={[styles.loadingCard, { backgroundColor: isDark ? '#24211E' : '#F7F2E9', borderColor: theme.colors.primary.default }]}>
@@ -324,12 +345,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 4,
   },
+  zone1HeaderArea: {
+    width: '100%',
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 10,
+    marginTop: 16,
   },
   headerTitleRow: {
     flexDirection: 'row',

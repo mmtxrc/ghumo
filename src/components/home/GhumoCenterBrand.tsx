@@ -17,14 +17,15 @@ export const GhumoCenterBrand: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
     zIndex: 1,
   },
   logoWrapper: {
-    width: 240,
-    height: 140,
+    width: 260,
+    height: 160,
     alignItems: 'center',
     justifyContent: 'center',
   },

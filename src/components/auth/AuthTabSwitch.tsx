@@ -23,11 +23,9 @@ export const AuthTabSwitch: React.FC<AuthTabSwitchProps> = ({ activeTab, onTabCh
   const slideAnim = useRef(new Animated.Value(activeTab === 'login' ? 0 : 1)).current;
 
   useEffect(() => {
-    Animated.spring(slideAnim, {
+    Animated.timing(slideAnim, {
       toValue: activeTab === 'login' ? 0 : 1,
-      damping: 18,
-      stiffness: 180,
-      mass: 0.6,
+      duration: 160,
       useNativeDriver: true,
     }).start();
   }, [activeTab, slideAnim]);
