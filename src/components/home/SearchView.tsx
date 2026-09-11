@@ -15,17 +15,26 @@ import {
 } from 'react-native';
 import { ScrollView, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Circle, Line } from 'react-native-svg';
+import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 import { ProcessingOutline } from './ProcessingOutline';
 import { SAMPLE_PLACES, SAMPLE_ITINERARIES, querySamplePlaces } from '@/data/sampleDatasets';
 
-const QUICK_CATEGORIES = [
-  { id: '1', label: '🏰 Forts & Palaces', query: 'Fort' },
-  { id: '2', label: '🍛 Street Food & Chaat', query: 'Food' },
-  { id: '3', label: '🛍 Flea Markets & Bazaars', query: 'Market' },
-  { id: '4', label: '🛕 Spiritual Shrines', query: 'Gurudwara' },
-  { id: '5', label: '🏛 Monuments & Heritage', query: 'Heritage' },
+interface QuickCategoryItem {
+  id: string;
+  label: string;
+  query: string;
+  iconName: string;
+  iconPack: 'Ionicons' | 'Feather' | 'MaterialCommunityIcons' | 'FontAwesome5';
+}
+
+const QUICK_CATEGORIES: QuickCategoryItem[] = [
+  { id: '1', label: 'Forts & Palaces', query: 'Fort', iconName: 'landmark', iconPack: 'FontAwesome5' },
+  { id: '2', label: 'Street Food & Chaat', query: 'Food', iconName: 'restaurant-outline', iconPack: 'Ionicons' },
+  { id: '3', label: 'Flea Markets & Bazaars', query: 'Market', iconName: 'shopping-bag', iconPack: 'Feather' },
+  { id: '4', label: 'Spiritual Shrines', query: 'Gurudwara', iconName: 'temple-hindu', iconPack: 'MaterialCommunityIcons' },
+  { id: '5', label: 'Monuments & Heritage', query: 'Heritage', iconName: 'arch', iconPack: 'MaterialCommunityIcons' },
 ];
 
 interface SearchViewProps {
@@ -82,7 +91,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityLabel="Close search view"
         >
-          <Text style={[styles.closeText, { color: theme.colors.text.secondary }]}>✕</Text>
+          <Ionicons name="close" size={16} color={theme.colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
@@ -120,11 +129,10 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
               <TouchableOpacity
                 onPress={clearSearchQuery}
                 style={styles.clearBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Clear search text"
               >
-                <View style={[styles.clearBadge, { backgroundColor: isDark ? '#3A3530' : '#E2DCD2' }]}>
-                  <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                </View>
+                <Ionicons name="backspace-outline" size={17} color={theme.colors.text.secondary} />
               </TouchableOpacity>
             )}
           </View>
@@ -172,9 +180,23 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.categoryText, { color: theme.colors.text.primary }]}>
-                  {cat.label}
-                </Text>
+                <View style={styles.chipRow}>
+                  {cat.iconPack === 'Ionicons' && (
+                    <Ionicons name={cat.iconName as any} size={13} color={theme.colors.text.primary} />
+                  )}
+                  {cat.iconPack === 'Feather' && (
+                    <Feather name={cat.iconName as any} size={12} color={theme.colors.text.primary} />
+                  )}
+                  {cat.iconPack === 'FontAwesome5' && (
+                    <FontAwesome5 name={cat.iconName as any} size={11} color={theme.colors.text.primary} />
+                  )}
+                  {cat.iconPack === 'MaterialCommunityIcons' && (
+                    <MaterialCommunityIcons name={cat.iconName as any} size={13} color={theme.colors.text.primary} />
+                  )}
+                  <Text style={[styles.categoryText, { color: theme.colors.text.primary }]}>
+                    {cat.label}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -196,9 +218,12 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
         {/* Search History (Last 5 terms - Enlisted below pills when in default view) */}
         {!hasProcessedSearch && searchHistory.length > 0 && (
           <View style={styles.historySection}>
-            <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
-              🕐 Recent Searches
-            </Text>
+            <View style={styles.sectionHeadingRow}>
+              <Feather name="clock" size={13} color={theme.colors.text.secondary} />
+              <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+                Recent Searches
+              </Text>
+            </View>
             <View style={styles.historyList}>
               {searchHistory.map((item, idx) => (
                 <TouchableOpacity
@@ -216,13 +241,11 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                   }}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.historyIcon}>🔍</Text>
+                  <Feather name="search" size={13} color={theme.colors.text.muted} />
                   <Text style={[styles.historyText, { color: theme.colors.text.primary }]} numberOfLines={1}>
                     {item}
                   </Text>
-                  <Text style={[styles.historyActionText, { color: theme.colors.primary.default }]}>
-                    Search →
-                  </Text>
+                  <Feather name="arrow-up-right" size={16} color={theme.colors.primary.default} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -248,13 +271,25 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                 activeOpacity={0.7}
               >
                 <View style={styles.resultHeader}>
-                  <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
-                    {place.type === 'food' ? '🍲' : place.type === 'market' ? '🛍' : '📍'} {place.name}
-                  </Text>
-                  {place.rating && (
-                    <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
-                      ★ {place.rating}
+                  <View style={styles.titleWithIcon}>
+                    {place.type === 'food' ? (
+                      <Ionicons name="restaurant-outline" size={15} color={theme.colors.primary.default} />
+                    ) : place.type === 'market' ? (
+                      <Feather name="shopping-bag" size={14} color={theme.colors.primary.default} />
+                    ) : (
+                      <Ionicons name="location-outline" size={15} color={theme.colors.primary.default} />
+                    )}
+                    <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
+                      {place.name}
                     </Text>
+                  </View>
+                  {place.rating && (
+                    <View style={styles.ratingBadgeContainer}>
+                      <Ionicons name="star" size={11} color={theme.colors.primary.default} />
+                      <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
+                        {place.rating}
+                      </Text>
+                    </View>
                   )}
                 </View>
                 {place.category && (
@@ -263,9 +298,12 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                   </Text>
                 )}
                 {place.vibe && (
-                  <Text style={[styles.vibeText, { color: theme.colors.primary.default }]}>
-                    ✨ Vibe: {place.vibe}
-                  </Text>
+                  <View style={styles.inlineInfoRow}>
+                    <Ionicons name="sparkles" size={12} color={theme.colors.primary.default} />
+                    <Text style={[styles.vibeText, { color: theme.colors.primary.default }]}>
+                      Vibe: {place.vibe}
+                    </Text>
+                  </View>
                 )}
                 {place.reason ? (
                   <Text style={[styles.placeDesc, { color: theme.colors.text.secondary }]}>
@@ -277,28 +315,40 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                   </Text>
                 ) : null}
                 {place.must_try_cuisine && (
-                  <Text style={[styles.placeDesc, { color: theme.colors.primary.default }]}>
-                    🍽️ Must-Try: {place.must_try_cuisine}
-                  </Text>
+                  <View style={styles.inlineInfoRow}>
+                    <Ionicons name="restaurant-outline" size={12} color={theme.colors.primary.default} />
+                    <Text style={[styles.placeDesc, { color: theme.colors.primary.default }]}>
+                      Must-Try: {place.must_try_cuisine}
+                    </Text>
+                  </View>
                 )}
                 {(place.ticket_price || place.timings) && (
                   <View style={styles.metaRow}>
                     {place.ticket_price && (
-                      <Text style={[styles.metaBadge, { color: theme.colors.text.secondary, backgroundColor: isDark ? '#2E2B27' : '#EFE9DE' }]}>
-                        🎟️ {place.ticket_price}
-                      </Text>
+                      <View style={[styles.metaBadge, { backgroundColor: isDark ? '#2E2B27' : '#EFE9DE' }]}>
+                        <Ionicons name="ticket-outline" size={12} color={theme.colors.text.secondary} />
+                        <Text style={[styles.metaBadgeText, { color: theme.colors.text.secondary }]}>
+                          {place.ticket_price}
+                        </Text>
+                      </View>
                     )}
                     {place.timings && (
-                      <Text style={[styles.metaBadge, { color: theme.colors.text.secondary, backgroundColor: isDark ? '#2E2B27' : '#EFE9DE' }]}>
-                        ⏰ {place.timings}
-                      </Text>
+                      <View style={[styles.metaBadge, { backgroundColor: isDark ? '#2E2B27' : '#EFE9DE' }]}>
+                        <Feather name="clock" size={11} color={theme.colors.text.secondary} />
+                        <Text style={[styles.metaBadgeText, { color: theme.colors.text.secondary }]}>
+                          {place.timings}
+                        </Text>
+                      </View>
                     )}
                   </View>
                 )}
                 {place.must_see && (
-                  <Text style={[styles.mustSeeText, { color: theme.colors.primary.default }]}>
-                    ✨ Must-See: {place.must_see}
-                  </Text>
+                  <View style={styles.inlineInfoRow}>
+                    <Ionicons name="sparkles" size={12} color={theme.colors.primary.default} />
+                    <Text style={[styles.mustSeeText, { color: theme.colors.primary.default }]}>
+                      Must-See: {place.must_see}
+                    </Text>
+                  </View>
                 )}
               </TouchableOpacity>
             ))}
@@ -328,15 +378,18 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
               ]}
             >
               <View style={styles.cardTopRow}>
-                <Text style={styles.cardIcon}>🗺️</Text>
+                <Feather name="map-pin" size={14} color={theme.colors.primary.default} />
                 <Text style={[styles.cardTitle, { color: theme.colors.text.primary }]}>
                   {item.title}
                 </Text>
               </View>
               {item.budget && (
-                <Text style={[styles.budgetText, { color: theme.colors.primary.default }]}>
-                  💰 {item.budget}
-                </Text>
+                <View style={styles.inlineInfoRow}>
+                  <MaterialCommunityIcons name="cash-multiple" size={13} color={theme.colors.primary.default} />
+                  <Text style={[styles.budgetText, { color: theme.colors.primary.default }]}>
+                    {item.budget}
+                  </Text>
+                </View>
               )}
               <Text style={[styles.cardBody, { color: theme.colors.text.secondary }]}>
                 {item.summary}
@@ -359,7 +412,10 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
                   onPress={() => handlePlanWithAI(item as any)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cardActionBtnFillText}>Plan Itinerary ✨</Text>
+                  <View style={styles.chipRow}>
+                    <Text style={styles.cardActionBtnFillText}>Plan Itinerary</Text>
+                    <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+                  </View>
                 </TouchableOpacity>
               </View>
             </View>
@@ -388,12 +444,18 @@ export const SearchView: React.FC<SearchViewProps> = ({ onClose, headerGesture }
               activeOpacity={0.7}
             >
               <View style={styles.resultHeader}>
-                <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
-                  📍 {item.name}
-                </Text>
-                <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
-                  ★ {item.rating}
-                </Text>
+                <View style={styles.titleWithIcon}>
+                  <Ionicons name="location-outline" size={14} color={theme.colors.primary.default} />
+                  <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
+                    {item.name}
+                  </Text>
+                </View>
+                <View style={styles.ratingBadgeContainer}>
+                  <Ionicons name="star" size={11} color={theme.colors.primary.default} />
+                  <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
+                    {item.rating}
+                  </Text>
+                </View>
               </View>
               <Text style={[styles.placeCategory, { color: theme.colors.text.muted }]}>
                 {item.city} • {item.category}
@@ -494,6 +556,11 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     borderWidth: 1,
   },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   categoryText: {
     fontSize: 13,
     fontWeight: '600',
@@ -507,12 +574,17 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
     gap: 16,
   },
+  sectionHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
   sectionHeading: {
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginBottom: 8,
   },
   resultsSection: {
     gap: 8,
@@ -527,6 +599,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  ratingBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  inlineInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 3,
   },
   placeName: {
     fontSize: 14.5,
@@ -631,11 +720,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   metaBadge: {
-    fontSize: 11.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
+  },
+  metaBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '500',
   },
   mustSeeText: {
     fontSize: 12,

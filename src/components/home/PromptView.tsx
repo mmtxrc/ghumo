@@ -16,17 +16,26 @@ import {
 } from 'react-native';
 import { ScrollView, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
 import Svg, { Path, Line } from 'react-native-svg';
+import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 import { AttachmentPickerModal } from './AttachmentPickerModal';
 import { ProcessingOutline } from './ProcessingOutline';
 import { SAMPLE_ITINERARIES } from '@/data/sampleDatasets';
 
-const STARTER_PROMPTS = [
-  { id: '1', title: `🗺️ ${SAMPLE_ITINERARIES[0].title}`, prompt: SAMPLE_ITINERARIES[0].summary },
-  { id: '2', title: `🍛 ${SAMPLE_ITINERARIES[1].title}`, prompt: SAMPLE_ITINERARIES[1].summary },
-  { id: '3', title: '🏰 3-Day Royal Heritage in Jaipur', prompt: 'Create a 3-day royal heritage itinerary for Jaipur covering forts, traditional dining, and local bazaars.' },
-  { id: '4', title: '🌊 Lakeside Cafes & Sunsets in Udaipur', prompt: 'Find the most scenic lakeside cafes, sunset viewpoints, and boat ride spots in Udaipur.' },
+interface StarterPromptItem {
+  id: string;
+  title: string;
+  prompt: string;
+  iconName: string;
+  iconPack: 'Ionicons' | 'Feather' | 'MaterialCommunityIcons' | 'FontAwesome5';
+}
+
+const STARTER_PROMPTS: StarterPromptItem[] = [
+  { id: '1', title: SAMPLE_ITINERARIES[0].title, prompt: SAMPLE_ITINERARIES[0].summary, iconName: 'map-pin', iconPack: 'Feather' },
+  { id: '2', title: SAMPLE_ITINERARIES[1].title, prompt: SAMPLE_ITINERARIES[1].summary, iconName: 'restaurant-outline', iconPack: 'Ionicons' },
+  { id: '3', title: '3-Day Royal Heritage in Jaipur', prompt: 'Create a 3-day royal heritage itinerary for Jaipur covering forts, traditional dining, and local bazaars.', iconName: 'landmark', iconPack: 'FontAwesome5' },
+  { id: '4', title: 'Lakeside Cafes & Sunsets in Udaipur', prompt: 'Find the most scenic lakeside cafes, sunset viewpoints, and boat ride spots in Udaipur.', iconName: 'water-outline', iconPack: 'Ionicons' },
 ];
 
 interface PromptViewProps {
@@ -74,7 +83,7 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityLabel="Close prompt view"
         >
-          <Text style={[styles.closeText, { color: theme.colors.text.secondary }]}>✕</Text>
+          <Ionicons name="close" size={16} color={theme.colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
@@ -120,11 +129,10 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
               <TouchableOpacity
                 onPress={clearAiPrompt}
                 style={styles.clearBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Clear prompt text"
               >
-                <View style={[styles.clearBadge, { backgroundColor: isDark ? '#3A3530' : '#E2DCD2' }]}>
-                  <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                </View>
+                <Ionicons name="backspace-outline" size={17} color={theme.colors.text.secondary} />
               </TouchableOpacity>
             )}
 
@@ -160,8 +168,9 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
               key={att.id}
               style={[styles.attachmentBadge, { backgroundColor: isDark ? '#2E2B27' : '#F4EEE4' }]}
             >
+              <Feather name="paperclip" size={12} color={theme.colors.primary.default} />
               <Text style={[styles.attachmentText, { color: theme.colors.primary.default }]}>
-                📎 {att.name}
+                {att.name}
               </Text>
               <TouchableOpacity onPress={() => removeAttachment(att.id)}>
                 <Text style={styles.removeAttText}>×</Text>
@@ -200,9 +209,12 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
         {/* Recent AI Prompts (Last 5 history items in one line - Press & Hold to preview full, Tap to execute) */}
         {!aiResponse && promptHistory && promptHistory.length > 0 && (
           <View style={styles.historySection}>
-            <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
-              🕐 Recent Prompts
-            </Text>
+            <View style={styles.sectionHeadingRow}>
+              <Feather name="clock" size={13} color={theme.colors.text.secondary} />
+              <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+                Recent Prompts
+              </Text>
+            </View>
             <View style={styles.historyList}>
               {promptHistory.map((item, idx) => (
                 <TouchableOpacity
@@ -224,7 +236,7 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
                   delayLongPress={350}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.historyIcon}>✨</Text>
+                  <Ionicons name="sparkles" size={14} color={theme.colors.primary.default} />
                   <Text
                     style={[styles.historyText, { color: theme.colors.text.primary }]}
                     numberOfLines={1}
@@ -232,9 +244,7 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
                   >
                     {item}
                   </Text>
-                  <Text style={[styles.historyActionText, { color: theme.colors.primary.default }]}>
-                    Go →
-                  </Text>
+                  <Feather name="arrow-up-right" size={16} color={theme.colors.primary.default} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -244,13 +254,19 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
         {aiResponse ? (
           <View style={[styles.itineraryCard, { backgroundColor: isDark ? '#24211E' : '#F9F4EB', borderColor: theme.colors.primary.default }]}>
             <View style={styles.itineraryHeader}>
-              <Text style={[styles.itineraryTitle, { color: theme.colors.primary.default }]}>
-                ✨ {aiResponse.title}
-              </Text>
-              {aiResponse.budget && (
-                <Text style={[styles.budgetBadge, { color: theme.colors.primary.default, backgroundColor: isDark ? '#2B2520' : '#F7EBE2' }]}>
-                  💰 {aiResponse.budget}
+              <View style={styles.titleWithIcon}>
+                <Ionicons name="sparkles" size={16} color={theme.colors.primary.default} />
+                <Text style={[styles.itineraryTitle, { color: theme.colors.primary.default }]}>
+                  {aiResponse.title}
                 </Text>
+              </View>
+              {aiResponse.budget && (
+                <View style={[styles.budgetBadgeContainer, { backgroundColor: isDark ? '#2B2520' : '#F7EBE2' }]}>
+                  <MaterialCommunityIcons name="cash-multiple" size={13} color={theme.colors.primary.default} />
+                  <Text style={[styles.budgetBadge, { color: theme.colors.primary.default }]}>
+                    {aiResponse.budget}
+                  </Text>
+                </View>
               )}
             </View>
             <Text style={[styles.itinerarySummary, { color: theme.colors.text.primary }]}>
@@ -260,9 +276,12 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
             {/* Recommended Places Section (e.g., from /itinerary/video) */}
             {aiResponse.recommended_places && aiResponse.recommended_places.length > 0 && (
               <View style={styles.recommendedSection}>
-                <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
-                  📍 Recommended Spots & Food Stops
-                </Text>
+                <View style={styles.sectionHeadingRow}>
+                  <Ionicons name="location-outline" size={14} color={theme.colors.text.secondary} />
+                  <Text style={[styles.sectionHeading, { color: theme.colors.text.secondary }]}>
+                    Recommended Spots & Food Stops
+                  </Text>
+                </View>
                 {aiResponse.recommended_places.map((place, pIdx) => (
                   <View
                     key={pIdx}
@@ -275,9 +294,16 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
                     ]}
                   >
                     <View style={styles.recPlaceHeader}>
-                      <Text style={[styles.recPlaceName, { color: theme.colors.text.primary }]}>
-                        {place.type === 'food' ? '🍲' : '📍'} {place.name}
-                      </Text>
+                      <View style={styles.titleWithIcon}>
+                        {place.type === 'food' ? (
+                          <Ionicons name="restaurant-outline" size={14} color={theme.colors.primary.default} />
+                        ) : (
+                          <Ionicons name="location-outline" size={14} color={theme.colors.primary.default} />
+                        )}
+                        <Text style={[styles.recPlaceName, { color: theme.colors.text.primary }]}>
+                          {place.name}
+                        </Text>
+                      </View>
                       {place.type && (
                         <Text style={[styles.recPlaceType, { color: theme.colors.primary.default }]}>
                           {place.type.toUpperCase()}
@@ -294,47 +320,55 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
               </View>
             )}
 
-            {/* Day-by-Day breakdown if structured */}
+            {/* Day-by-Day breakdown matching the timeline layout */}
             {aiResponse.days && aiResponse.days.length > 0 && aiResponse.days.map((day) => (
               <View
-                key={day.dayNumber}
+                key={day.dayNumber || day.day}
                 style={[
                   styles.daySection,
                   {
                     backgroundColor: isDark ? '#1F1D1A' : '#FFFFFF',
-                    borderColor: theme.colors.border.default,
+                    borderColor: isDark ? '#36302B' : '#E6DEC1',
                   },
                 ]}
               >
                 <Text style={[styles.dayTitle, { color: theme.colors.primary.default }]}>
-                  Day {day.dayNumber}: {day.title}
+                  Day {day.dayNumber || day.day}: {day.title}
                 </Text>
-                {(day.places || day.activities || []).map((p: any, idx: number) => (
-                  <View key={idx} style={styles.placeItemRow}>
-                    <Text style={[styles.timeBadge, { color: theme.colors.text.muted }]}>
-                      {p.time || p.time_slot}
-                    </Text>
-                    <View style={styles.placeItemDetails}>
-                      <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
-                        {p.name || p.place}
+                {(day.places || day.activities || []).map((p: any, idx: number) => {
+                  const rawTime = p.time || p.time_slot || `Stop ${idx + 1}`;
+                  const formattedTime = rawTime.includes(' - ') ? rawTime.replace(' - ', '\n- ') : rawTime;
+
+                  return (
+                    <View key={idx} style={styles.placeItemRow}>
+                      <Text style={[styles.timeBadge, { color: theme.colors.text.muted }]}>
+                        {formattedTime}
                       </Text>
-                      {Boolean(p.description || p.purpose) && (
-                        <Text style={[styles.placeDescription, { color: theme.colors.text.secondary }]}>
-                          {p.description || p.purpose}
+                      <View style={styles.placeItemDetails}>
+                        <Text style={[styles.placeName, { color: theme.colors.text.primary }]}>
+                          {p.name || p.place}
                         </Text>
-                      )}
+                        {Boolean(p.description || p.purpose) && (
+                          <Text style={[styles.placeDescription, { color: theme.colors.text.secondary }]}>
+                            {p.description || p.purpose}
+                          </Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             ))}
 
             {/* Travel Tips Section */}
             {aiResponse.tips && aiResponse.tips.length > 0 && (
               <View style={[styles.tipsSection, { backgroundColor: isDark ? '#1E2522' : '#EFF7F4' }]}>
-                <Text style={[styles.tipsTitle, { color: theme.colors.brand.heritageGreen }]}>
-                  💡 Local Travel & Metro Tips
-                </Text>
+                <View style={styles.tipsTitleRow}>
+                  <Ionicons name="bulb-outline" size={15} color={theme.colors.brand.heritageGreen} />
+                  <Text style={[styles.tipsTitle, { color: theme.colors.brand.heritageGreen }]}>
+                    Local Travel & Metro Tips
+                  </Text>
+                </View>
                 {aiResponse.tips.map((tip, tIdx) => (
                   <Text key={tIdx} style={[styles.tipItem, { color: theme.colors.text.secondary }]}>
                     • {tip}
@@ -364,9 +398,20 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
                 }}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.promptTitle, { color: theme.colors.text.primary }]}>
-                  {item.title}
-                </Text>
+                <View style={styles.promptHeaderRow}>
+                  {item.iconPack === 'Ionicons' && (
+                    <Ionicons name={item.iconName as any} size={15} color={theme.colors.primary.default} />
+                  )}
+                  {item.iconPack === 'Feather' && (
+                    <Feather name={item.iconName as any} size={14} color={theme.colors.primary.default} />
+                  )}
+                  {item.iconPack === 'FontAwesome5' && (
+                    <FontAwesome5 name={item.iconName as any} size={13} color={theme.colors.primary.default} />
+                  )}
+                  <Text style={[styles.promptTitle, { color: theme.colors.text.primary }]}>
+                    {item.title}
+                  </Text>
+                </View>
                 <Text style={[styles.promptBody, { color: theme.colors.text.muted }]}>
                   {item.prompt}
                 </Text>
@@ -394,14 +439,17 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
             ]}
           >
             <View style={styles.modalHeaderRow}>
-              <Text style={[styles.modalTitle, { color: theme.colors.primary.default }]}>
-                ✨ Full AI Prompt
-              </Text>
+              <View style={styles.titleWithIcon}>
+                <Ionicons name="sparkles" size={16} color={theme.colors.primary.default} />
+                <Text style={[styles.modalTitle, { color: theme.colors.primary.default }]}>
+                  Full AI Prompt
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => setSelectedHistoryPrompt(null)}
                 style={[styles.modalCloseBtn, { backgroundColor: isDark ? '#302B26' : '#ECE5DA' }]}
               >
-                <Text style={[styles.modalCloseText, { color: theme.colors.text.secondary }]}>✕</Text>
+                <Ionicons name="close" size={15} color={theme.colors.text.secondary} />
               </TouchableOpacity>
             </View>
 
@@ -433,7 +481,10 @@ export const PromptView: React.FC<PromptViewProps> = ({ onClose, headerGesture }
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.modalSubmitText}>Hit Go ✨</Text>
+                <View style={styles.chipRow}>
+                  <Text style={styles.modalSubmitText}>Hit Go</Text>
+                  <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -608,15 +659,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  starterSection: {
-    gap: 8,
+  sectionHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
   },
   sectionHeading: {
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginBottom: 4,
+  },
+  starterSection: {
+    gap: 8,
   },
   promptCard: {
     padding: 13,
@@ -624,10 +680,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 8,
   },
+  promptHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 4,
+  },
   promptTitle: {
     fontSize: 14,
     fontWeight: '700',
-    marginBottom: 4,
+    flex: 1,
   },
   promptBody: {
     fontSize: 12.5,
@@ -641,57 +703,85 @@ const styles = StyleSheet.create({
   },
   itineraryHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
   },
   itineraryTitle: {
     fontSize: 17,
     fontWeight: '700',
+    flex: 1,
   },
   itinerarySummary: {
     fontSize: 13.5,
     lineHeight: 19,
   },
   daySection: {
-    marginTop: 6,
-    padding: 12,
-    borderRadius: 14,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 8,
+    gap: 12,
   },
   dayTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    marginBottom: 2,
   },
   placeItemRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 2,
+    alignItems: 'flex-start',
+    gap: 12,
+    marginVertical: 2,
   },
   timeBadge: {
     fontSize: 12,
     fontWeight: '700',
-    width: 68,
+    width: 82,
+    lineHeight: 16,
   },
   placeItemDetails: {
     flex: 1,
   },
   placeName: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 13.5,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   placeDescription: {
     fontSize: 12,
-    marginTop: 1,
-    lineHeight: 16,
+    marginTop: 3,
+    lineHeight: 17,
   },
-  budgetBadge: {
-    fontSize: 11.5,
-    fontWeight: '700',
+  budgetBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
     marginLeft: 8,
-    overflow: 'hidden',
+  },
+  budgetBadge: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  tipsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
   },
   recommendedSection: {
     marginTop: 6,

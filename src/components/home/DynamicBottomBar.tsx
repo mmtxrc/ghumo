@@ -32,12 +32,20 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import Svg, { Path, Circle, Line, Rect } from 'react-native-svg';
+import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 import { AttachmentPickerView } from './AttachmentPickerView';
 import { SearchView } from './SearchView';
 import { PromptView } from './PromptView';
 import { ProcessingOutline } from './ProcessingOutline';
+
+interface FilterPillItem {
+  id: string;
+  label: string;
+  iconName?: string;
+  iconPack?: 'Ionicons' | 'Feather' | 'MaterialCommunityIcons' | 'FontAwesome5';
+}
 
 const SEARCH_BAR_HEIGHT = 52;
 const ACTION_BUTTON_WIDTH = 54;
@@ -70,6 +78,8 @@ export const DynamicBottomBar: React.FC = () => {
     aiResponse,
     isMapVisible,
     toggleMapVisible,
+    isUsingCachedResult,
+    refetchCurrentResults,
   } = useHome();
 
   const [isAttachmentPickerOpen, setIsAttachmentPickerOpen] = useState(false);
@@ -79,46 +89,53 @@ export const DynamicBottomBar: React.FC = () => {
   const searchInputRef = useRef<TextInput>(null);
   const aiInputRef = useRef<TextInput>(null);
 
-  // Dynamic filter pills derived directly from search output headers (food, markets, attractions, hidden_gems, tips)
-  const availableFilterPills = useMemo(() => {
-    const pills: { id: string; label: string }[] = [];
+  // Dynamic filter pills derived directly from search output headers or itinerary days
+  const availableFilterPills = useMemo<FilterPillItem[]>(() => {
+    const pills: FilterPillItem[] = [];
 
     if (categorizedResults) {
       if (categorizedResults.food && categorizedResults.food.length > 0) {
-        pills.push({ id: 'food', label: `🍲 Food (${categorizedResults.food.length})` });
+        pills.push({ id: 'food', label: `Food (${categorizedResults.food.length})`, iconName: 'restaurant-outline', iconPack: 'Ionicons' });
       }
       if (categorizedResults.markets && categorizedResults.markets.length > 0) {
-        pills.push({ id: 'markets', label: `🛍 Markets (${categorizedResults.markets.length})` });
+        pills.push({ id: 'markets', label: `Markets (${categorizedResults.markets.length})`, iconName: 'shopping-bag', iconPack: 'Feather' });
       }
       if (categorizedResults.attractions && categorizedResults.attractions.length > 0) {
-        pills.push({ id: 'attractions', label: `🏛 Attractions (${categorizedResults.attractions.length})` });
+        pills.push({ id: 'attractions', label: `Attractions (${categorizedResults.attractions.length})`, iconName: 'landmark', iconPack: 'FontAwesome5' });
       }
       if (categorizedResults.hidden_gems && categorizedResults.hidden_gems.length > 0) {
-        pills.push({ id: 'hidden_gems', label: `💎 Hidden Gems (${categorizedResults.hidden_gems.length})` });
+        pills.push({ id: 'hidden_gems', label: `Hidden Gems (${categorizedResults.hidden_gems.length})`, iconName: 'diamond-outline', iconPack: 'Ionicons' });
       }
       if (categorizedResults.tips && categorizedResults.tips.length > 0) {
-        pills.push({ id: 'tips', label: `💡 Tips (${categorizedResults.tips.length})` });
+        pills.push({ id: 'tips', label: `Tips (${categorizedResults.tips.length})`, iconName: 'bulb-outline', iconPack: 'Ionicons' });
       }
       if (pills.length > 1) {
-        pills.unshift({ id: 'all', label: `📍 All Places (${categorizedResults.places.length})` });
+        pills.unshift({ id: 'all', label: `All Places (${categorizedResults.places.length})`, iconName: 'location-outline', iconPack: 'Ionicons' });
       }
     } else if (searchResults.length > 0) {
-      pills.push({ id: 'all', label: `📍 All Places (${searchResults.length})` });
+      pills.push({ id: 'all', label: `All Places (${searchResults.length})`, iconName: 'location-outline', iconPack: 'Ionicons' });
     } else if (aiResponse) {
       if (aiResponse.days && aiResponse.days.length > 0) {
         aiResponse.days.forEach((day, idx) => {
           pills.push({
             id: `day_${idx}`,
-            label: `📅 Day ${day.dayNumber || day.day || idx + 1}`,
+            label: `Day ${day.dayNumber || day.day || idx + 1}`,
+            iconName: 'calendar-outline',
+            iconPack: 'Ionicons',
           });
         });
       } else {
-        pills.push({ id: 'day_0', label: '📅 Day 1' });
+        pills.push({ id: 'day_0', label: 'Day 1', iconName: 'calendar-outline', iconPack: 'Ionicons' });
       }
     }
 
+    // When viewing locally cached results, display a matching Refresh pill as the first item
+    if (isUsingCachedResult && pills.length > 0) {
+      pills.unshift({ id: 'refresh', label: '', iconName: 'refresh-cw', iconPack: 'Feather' });
+    }
+
     return pills;
-  }, [categorizedResults, searchResults, aiResponse]);
+  }, [categorizedResults, searchResults, aiResponse, isUsingCachedResult]);
 
   // Horizontal coupling physics animations (expansion of active pill, contraction of adjacent pills/map button)
   const pillHorizontalExpandAnims = useRef<RNAnimated.Value[]>(
@@ -127,6 +144,11 @@ export const DynamicBottomBar: React.FC = () => {
   const mapButtonDisplaceAnim = useRef(new RNAnimated.Value(0)).current;
 
   const handlePillPress = (catId: string, index: number) => {
+    // If user tapped the Refresh pill, trigger fresh refetch from backend
+    if (catId === 'refresh') {
+      refetchCurrentResults();
+      return;
+    }
     // Horizontal coupling animation:
     // 1. Tapped pill expands horizontally (+16px)
     // 2. Left neighbor (or map button if first pill) contracts by (-8px)
@@ -451,15 +473,15 @@ export const DynamicBottomBar: React.FC = () => {
 
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
+      Keyboard.dismiss();
       performSearch(searchQuery);
     }
-    openSheet();
   };
 
   const handlePromptSubmit = () => {
     if (hasPromptText) {
+      Keyboard.dismiss();
       submitAIPrompt(aiPrompt);
-      openSheet();
     }
   };
 
@@ -596,22 +618,16 @@ export const DynamicBottomBar: React.FC = () => {
               >
                 <RNAnimated.View style={{ opacity: mapIconFadeAnim, alignItems: 'center', justifyContent: 'center' }}>
                   {isMapVisible ? (
-                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <Circle cx="12" cy="12" r="3.2" fill={theme.colors.primary.default} stroke={theme.colors.primary.default} />
-                    </Svg>
+                    <Feather name="map" size={19} color={theme.colors.primary.default} />
                   ) : (
-                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <Path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                      <Line x1="1" y1="1" x2="23" y2="23" stroke={theme.colors.primary.default} strokeWidth="2" />
-                    </Svg>
+                    <MaterialCommunityIcons name="map-outline" size={20} color={theme.colors.text.muted} />
                   )}
                 </RNAnimated.View>
               </TouchableOpacity>
             </RNAnimated.View>
 
             {/* Dynamic Filter Pills beside Map Button (only when Map is active and results exist) */}
-            {isMapVisible && availableFilterPills.length > 0 && (
+            {isMapVisible && availableFilterPills.length > 0 ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -619,9 +635,10 @@ export const DynamicBottomBar: React.FC = () => {
                 contentContainerStyle={styles.pillsScrollContainer}
                 style={styles.pillsScrollView}
               >
-                {availableFilterPills.map((pill: { id: string; label: string }, idx: number) => {
+                {availableFilterPills.map((pill: FilterPillItem, idx: number) => {
                   const isActive = activeMapCategory === pill.id;
                   const expandAnim = pillHorizontalExpandAnims[idx] || new RNAnimated.Value(0);
+                  const iconColor = isActive ? theme.colors.primary.default : theme.colors.text.primary;
 
                   return (
                     <RNAnimated.View
@@ -646,27 +663,87 @@ export const DynamicBottomBar: React.FC = () => {
                               : (isDark ? 'rgba(35,32,29,0.95)' : 'rgba(255,255,255,0.95)'),
                             borderColor: isActive ? theme.colors.primary.default : (isDark ? '#3D3732' : '#E0D6C8'),
                             borderWidth: isActive ? 1.6 : 1,
+                            paddingHorizontal: pill.label ? 12 : 10,
                           },
                         ]}
                         onPress={() => handlePillPress(pill.id, idx)}
                         activeOpacity={0.7}
                       >
-                        <Text
-                          style={[
-                            styles.mapPillText,
-                            {
-                              color: isActive ? theme.colors.primary.default : theme.colors.text.primary,
-                              fontWeight: isActive ? '700' : '600',
-                            },
-                          ]}
-                        >
-                          {pill.label}
-                        </Text>
+                        <View style={styles.pillInnerRow}>
+                          {pill.iconPack === 'Ionicons' && pill.iconName && (
+                            <Ionicons name={pill.iconName as any} size={14} color={iconColor} />
+                          )}
+                          {pill.iconPack === 'Feather' && pill.iconName && (
+                            <Feather name={pill.iconName as any} size={13} color={iconColor} />
+                          )}
+                          {pill.iconPack === 'FontAwesome5' && pill.iconName && (
+                            <FontAwesome5 name={pill.iconName as any} size={12} color={iconColor} />
+                          )}
+                          {pill.iconPack === 'MaterialCommunityIcons' && pill.iconName && (
+                            <MaterialCommunityIcons name={pill.iconName as any} size={14} color={iconColor} />
+                          )}
+                          {Boolean(pill.label) && (
+                            <Text
+                              style={[
+                                styles.mapPillText,
+                                {
+                                  color: iconColor,
+                                  fontWeight: isActive ? '700' : '600',
+                                },
+                              ]}
+                            >
+                              {pill.label}
+                            </Text>
+                          )}
+                        </View>
                       </TouchableOpacity>
                     </RNAnimated.View>
                   );
                 })}
               </ScrollView>
+            ) : (
+              /* Dynamic Mode Title: "Search" vs "Plan Your Itinerary" (in line with show/hide map button) */
+              <GestureDetector gesture={bottomBarPanGesture}>
+                <View style={styles.floatingHeaderContainer} pointerEvents="box-none">
+                  <RNAnimated.View
+                    style={[
+                      styles.floatingHeaderItem,
+                      {
+                        opacity: searchModeOpacity,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.floatingHeaderText,
+                        isDark ? styles.floatingHeaderTextDark : styles.floatingHeaderTextLight,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Search
+                    </Text>
+                  </RNAnimated.View>
+                  <RNAnimated.View
+                    style={[
+                      styles.floatingHeaderItem,
+                      styles.floatingHeaderItemAbsolute,
+                      {
+                        opacity: aiModeOpacity,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.floatingHeaderText,
+                        isDark ? styles.floatingHeaderTextDark : styles.floatingHeaderTextLight,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Plan Your Itinerary
+                    </Text>
+                  </RNAnimated.View>
+                </View>
+              </GestureDetector>
             )}
           </View>
 
@@ -740,8 +817,8 @@ export const DynamicBottomBar: React.FC = () => {
                         borderColor: (activeMode === 'search' ? isSearching : isProcessingAI)
                           ? 'transparent'
                           : activeMode === 'ai'
-                          ? theme.colors.primary.default
-                          : theme.colors.border.default,
+                            ? theme.colors.primary.default
+                            : theme.colors.border.default,
                         borderWidth: activeMode === 'ai' ? 1.5 : 1,
                       },
                     ]}
@@ -786,12 +863,10 @@ export const DynamicBottomBar: React.FC = () => {
                             <TouchableOpacity
                               onPress={clearSearchQuery}
                               style={styles.clearButton}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                               accessibilityLabel="Clear search text"
                             >
-                              <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
-                                <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                              </View>
+                              <Ionicons name="backspace-outline" size={18} color={theme.colors.text.secondary} />
                             </TouchableOpacity>
                           )}
 
@@ -854,7 +929,7 @@ export const DynamicBottomBar: React.FC = () => {
                             selectionColor={theme.colors.primary.default}
                           />
 
-                          {/* Clear '✕' button */}
+                          {/* Clear backspace button */}
                           {hasPromptText && (
                             <TouchableOpacity
                               onPress={() => {
@@ -862,12 +937,10 @@ export const DynamicBottomBar: React.FC = () => {
                                 setPromptBoxHeight(SEARCH_BAR_HEIGHT);
                               }}
                               style={styles.clearButton}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                               accessibilityLabel="Clear prompt text"
                             >
-                              <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
-                                <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                              </View>
+                              <Ionicons name="backspace-outline" size={18} color={theme.colors.text.secondary} />
                             </TouchableOpacity>
                           )}
 
@@ -979,6 +1052,41 @@ const styles = StyleSheet.create({
     zIndex: 95,
     gap: 8,
   },
+  floatingHeaderContainer: {
+    flex: 1,
+    height: MAP_BUTTON_SIZE,
+    justifyContent: 'center',
+    marginLeft: 6,
+    position: 'relative',
+  },
+  floatingHeaderItem: {
+    justifyContent: 'center',
+  },
+  floatingHeaderItemAbsolute: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  floatingHeaderText: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  floatingHeaderTextDark: {
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.95)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  floatingHeaderTextLight: {
+    color: '#11100E',
+    textShadowColor: '#FFFFFF',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
   pillsScrollView: {
     flex: 1,
     marginLeft: 4,
@@ -999,6 +1107,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 3,
+  },
+  pillInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   mapPillText: {
     fontSize: 12.5,

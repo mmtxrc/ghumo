@@ -10,7 +10,7 @@
  * - Bi-directional synchronization with OpenStreetMap camera & pins
  */
 
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,11 +18,19 @@ import {
   StyleSheet,
   Dimensions,
   Image as RNImage,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
+import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 import { PlaceSearchResult, TravelTipItem } from '@/domain/models/search';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface DayTimeItem {
   id: string;
@@ -37,6 +45,7 @@ interface DayTimeItem {
 export const MapPlaceCarousel: React.FC = () => {
   const { theme, isDark } = useTheme();
   const {
+    searchQuery,
     searchResults,
     categorizedResults,
     activeMapCategory,
@@ -52,6 +61,8 @@ export const MapPlaceCarousel: React.FC = () => {
     submitPlaceRating,
     clearResults,
   } = useHome();
+
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   const placesScrollViewRef = useRef<ScrollView>(null);
   const timeScrollViewRef = useRef<ScrollView>(null);
@@ -71,16 +82,18 @@ export const MapPlaceCarousel: React.FC = () => {
     return 0;
   }, [activeMapCategory]);
 
-  // Helper to parse time strings like "09:00 AM", "1:30 PM", "09:30" into number and period
+  // Helper to parse time strings: clock times (e.g. 1:30 PM) or stop numbers (1, 2, 3...)
   const parseTime = (timeStr?: string, defaultIdx: number = 0): { num: string; period: string } => {
     if (!timeStr) {
-      return { num: `${defaultIdx + 1}`, period: 'STOP' };
+      return { num: `${defaultIdx + 1}`, period: '' };
     }
 
     const trimmed = timeStr.trim();
-    const match = trimmed.match(/^(\d{1,2}:\d{2})\s*(AM|PM)?/i);
-    if (match) {
-      return { num: match[1], period: (match[2] || '').toUpperCase() };
+
+    // Check for clock format e.g. "09:00 AM", "1:30 PM", "14:00"
+    const clockMatch = trimmed.match(/^(\d{1,2}:\d{2})\s*(AM|PM)?/i);
+    if (clockMatch) {
+      return { num: clockMatch[1], period: (clockMatch[2] || '').toUpperCase() };
     }
 
     if (trimmed.toLowerCase().includes('morning')) return { num: '9:00', period: 'AM' };
@@ -88,8 +101,25 @@ export const MapPlaceCarousel: React.FC = () => {
     if (trimmed.toLowerCase().includes('evening') || trimmed.toLowerCase().includes('sunset')) return { num: '5:30', period: 'PM' };
     if (trimmed.toLowerCase().includes('night') || trimmed.toLowerCase().includes('dinner')) return { num: '8:00', period: 'PM' };
 
+    // Check for "Stop 1", "Stop 2", "Place 3", "Spot 4", etc.
+    const stopMatch = trimmed.match(/^(?:Stop|Spot|Place|Location|Activity|Item|Step)\s*(\d+)/i);
+    if (stopMatch) {
+      return { num: stopMatch[1], period: '' };
+    }
+
+    // Check if trimmed contains purely digits
+    const digitsOnly = trimmed.replace(/\D/g, '');
+    if (digitsOnly.length > 0 && digitsOnly.length <= 3) {
+      return { num: digitsOnly, period: '' };
+    }
+
+    // If it is just the word "Stop" or similar, return index + 1
+    if (/^(?:Stop|Spot|Place|Location|Activity)$/i.test(trimmed)) {
+      return { num: `${defaultIdx + 1}`, period: '' };
+    }
+
     const firstWord = trimmed.split(' ')[0];
-    return { num: firstWord.length > 5 ? firstWord.slice(0, 5) : firstWord, period: '' };
+    return { num: firstWord.length > 5 ? `${defaultIdx + 1}` : firstWord, period: '' };
   };
 
   // Build AI Day/Time structures
@@ -240,17 +270,40 @@ export const MapPlaceCarousel: React.FC = () => {
     return null;
   }
 
+  // Clean itinerary titles (strip prefixes like "Day-Wise Itinerary: ", "YouTube Vlog Itinerary: ")
+  const cleanItineraryTitle = (rawTitle?: string, location?: string): string => {
+    if (location && (!rawTitle || rawTitle.toLowerCase().includes('itinerary'))) {
+      return location;
+    }
+    if (!rawTitle) return location || 'Trip Highlights';
+    const cleaned = rawTitle
+      .replace(/^(?:day[- ]wise\s+itinerary|youtube\s+vlog\s+itinerary|vlog\s+itinerary|ai\s+itinerary|itinerary)\s*:\s*/i, '')
+      .replace(/^(?:day[- ]wise\s+itinerary|youtube\s+vlog\s+itinerary|vlog\s+itinerary|ai\s+itinerary|itinerary)\s+for\s+/i, '')
+      .trim();
+    return cleaned || location || 'Trip Highlights';
+  };
+
   // Header Title & Location
   const headerTitle = aiResponse
-    ? (aiResponse.title || `Trip to ${aiResponse.location || 'Destination'}`)
+    ? 'Itinerary'
     : isTipsMode
     ? `Travel Tips (${activeTips.length})`
     : `${activeMapCategory === 'all' ? 'All Places' : activeMapCategory.toUpperCase()} (${filteredSearchPlaces.length})`;
+
+  // Subtitle location if different from main title (only for non-itinerary search places)
+  const shouldShowSubLocation = Boolean(
+    !aiResponse &&
+    searchQuery &&
+    headerTitle.toLowerCase().trim() !== searchQuery.toLowerCase().trim()
+  );
 
   // Budget for top right header (day budget or total budget)
   const displayBudget = aiResponse
     ? (activeDaySchedule?.estimatedDayCost || aiResponse.budget_breakdown?.activities || aiResponse.budget)
     : null;
+
+  // Explore Destination title above the carousel
+  const exploreLocationTitle = aiResponse?.location || searchQuery || (filteredSearchPlaces[0]?.name ? filteredSearchPlaces[0].name : '');
 
   // Handle Time circle tap
   const handleSelectTimeItem = (item: DayTimeItem, index: number) => {
@@ -258,8 +311,30 @@ export const MapPlaceCarousel: React.FC = () => {
     placesScrollViewRef.current?.scrollTo({ x: index * (CARD_WIDTH + CARD_GAP), animated: true });
   };
 
+  // Handle place card click to toggle expansion with smooth layout animation
+  const handleCardPress = (placeId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedPlaceId(placeId);
+    setExpandedCardId((prev) => (prev === placeId ? null : placeId));
+  };
+
   return (
     <View style={styles.outerContainer} pointerEvents="box-none">
+      {/* "Explore <location>" text with drop shadow / outline right above the carousel */}
+      {Boolean(exploreLocationTitle) && (
+        <View style={[styles.exploreHeaderContainer, { width: containerWidth }]} pointerEvents="none">
+          <Text
+            style={[
+              styles.exploreHeaderText,
+              isDark ? styles.exploreHeaderTextDark : styles.exploreHeaderTextLight,
+            ]}
+            numberOfLines={1}
+          >
+            {`Explore ${exploreLocationTitle}`}
+          </Text>
+        </View>
+      )}
+
       <View
         style={[
           styles.carouselWrapper,
@@ -273,13 +348,21 @@ export const MapPlaceCarousel: React.FC = () => {
         {/* Top Header Row with Title, Location, Budget badge & Close button */}
         <View style={styles.headerRow}>
           <View style={styles.headerTextGroup}>
-            <Text style={[styles.statusText, { color: theme.colors.text.primary }]} numberOfLines={1}>
-              {headerTitle}
-            </Text>
-            {Boolean(aiResponse?.location) && (
-              <Text style={[styles.subLocationText, { color: theme.colors.primary.default }]} numberOfLines={1}>
-                📍 {aiResponse?.location}
+            <View style={styles.headerTitleRow}>
+              {Boolean(!aiResponse && filteredSearchPlaces[0]?.name) && (
+                <Ionicons name="location-sharp" size={14} color={theme.colors.primary.default} style={{ marginRight: 4 }} />
+              )}
+              <Text style={[styles.statusText, { color: theme.colors.text.primary }]} numberOfLines={1}>
+                {headerTitle}
               </Text>
+            </View>
+            {shouldShowSubLocation && (
+              <View style={styles.subLocationRow}>
+                <Ionicons name="location-sharp" size={11} color={theme.colors.primary.default} style={{ marginRight: 3 }} />
+                <Text style={[styles.subLocationText, { color: theme.colors.primary.default }]} numberOfLines={1}>
+                  {searchQuery}
+                </Text>
+              </View>
             )}
           </View>
 
@@ -295,8 +378,13 @@ export const MapPlaceCarousel: React.FC = () => {
                   },
                 ]}
               >
-                <Text style={[styles.budgetText, { color: theme.colors.primary.default }]} numberOfLines={1}>
-                  💰 {displayBudget}
+                <FontAwesome5 name="money-bill-wave" size={10.5} color={theme.colors.primary.default} style={{ marginRight: 4 }} />
+                <Text
+                  style={[styles.budgetText, { color: theme.colors.primary.default }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {displayBudget}
                 </Text>
               </View>
             )}
@@ -307,15 +395,15 @@ export const MapPlaceCarousel: React.FC = () => {
               accessibilityRole="button"
               accessibilityLabel="Close itinerary cards"
             >
-              <Text style={[styles.closeText, { color: theme.colors.text.secondary }]}>✕</Text>
+              <Feather name="x" size={13} color={theme.colors.text.secondary} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* ================= AI PROMPT VIEW: TIME CIRCLES + CENTERED PLACE CARDS ================= */}
+        {/* ================= AI PROMPT VIEW: TIMELINE CHIPS + CENTERED PLACE CARDS ================= */}
         {hasAiContent ? (
           <View style={styles.aiContentContainer}>
-            {/* 1. Time Slot Circles ( 9:00 AM ) ( 11:30 AM ) ( 1:30 PM ) */}
+            {/* 1. Timeline Rounded Rectangle Chips ( [1] [2] [3] or [9:00 AM] [1:30 PM] ) */}
             {activeDayPlaces.length > 0 && (
               <ScrollView
                 ref={timeScrollViewRef}
@@ -327,6 +415,7 @@ export const MapPlaceCarousel: React.FC = () => {
               >
                 {activeDayPlaces.map((item, idx) => {
                   const isTimeSelected = selectedPlaceId === item.id || (!selectedPlaceId && idx === 0);
+                  const isPureNumber = !item.timePeriod;
 
                   return (
                     <TouchableOpacity
@@ -334,7 +423,7 @@ export const MapPlaceCarousel: React.FC = () => {
                       activeOpacity={0.85}
                       onPress={() => handleSelectTimeItem(item, idx)}
                       style={[
-                        styles.timeCircle,
+                        styles.timeChip,
                         {
                           backgroundColor: isTimeSelected
                             ? theme.colors.primary.default
@@ -351,7 +440,7 @@ export const MapPlaceCarousel: React.FC = () => {
                     >
                       <Text
                         style={[
-                          styles.timeCircleNum,
+                          isPureNumber ? styles.timeChipPureNum : styles.timeChipText,
                           {
                             color: isTimeSelected ? '#FFFFFF' : theme.colors.text.primary,
                             fontWeight: isTimeSelected ? '800' : '700',
@@ -364,7 +453,7 @@ export const MapPlaceCarousel: React.FC = () => {
                       {Boolean(item.timePeriod) && (
                         <Text
                           style={[
-                            styles.timeCirclePeriod,
+                            styles.timeChipPeriod,
                             {
                               color: isTimeSelected ? 'rgba(255,255,255,0.9)' : theme.colors.text.muted,
                               fontWeight: isTimeSelected ? '700' : '600',
@@ -381,7 +470,7 @@ export const MapPlaceCarousel: React.FC = () => {
               </ScrollView>
             )}
 
-            {/* 2. Horizontal Centered Peek-Paginated Place Cards with Brief Descriptions */}
+            {/* 2. Horizontal Centered Peek-Paginated Place Cards with Expandable Descriptions */}
             <ScrollView
               ref={placesScrollViewRef}
               horizontal
@@ -406,13 +495,14 @@ export const MapPlaceCarousel: React.FC = () => {
               {activeDayPlaces.map((item) => {
                 const place = item.place;
                 const isSelected = selectedPlaceId === place.id;
+                const isCardExpanded = expandedCardId === place.id;
                 const imageUri = place.image?.url || place.imageUrl;
 
                 return (
                   <TouchableOpacity
                     key={place.id}
                     activeOpacity={0.92}
-                    onPress={() => setSelectedPlaceId(place.id)}
+                    onPress={() => handleCardPress(place.id)}
                     style={[
                       styles.card,
                       {
@@ -420,6 +510,9 @@ export const MapPlaceCarousel: React.FC = () => {
                         backgroundColor: isDark ? '#23211F' : '#FAF6EE',
                         borderColor: isSelected ? theme.colors.primary.default : (isDark ? '#38332E' : '#E8E0D2'),
                         borderWidth: isSelected ? 1.8 : 1,
+                        transform: [{ scale: isSelected ? 1.02 : 0.98 }],
+                        elevation: isSelected ? 6 : 2,
+                        shadowOpacity: isSelected ? 0.25 : 0.08,
                       },
                     ]}
                   >
@@ -429,9 +522,13 @@ export const MapPlaceCarousel: React.FC = () => {
                         <RNImage source={{ uri: imageUri }} style={styles.placeImage} resizeMode="cover" />
                       ) : (
                         <View style={[styles.placeholderThumb, { backgroundColor: isDark ? '#332E2A' : '#EAE3D5' }]}>
-                          <Text style={{ fontSize: 22 }}>
-                            {place.type === 'food' ? '🍲' : place.type === 'market' ? '🛍' : '🏰'}
-                          </Text>
+                          {place.type === 'food' ? (
+                            <Ionicons name="restaurant-outline" size={24} color={isDark ? '#FFFFFF' : '#222222'} />
+                          ) : place.type === 'market' ? (
+                            <Feather name="shopping-bag" size={22} color={isDark ? '#FFFFFF' : '#222222'} />
+                          ) : (
+                            <MaterialCommunityIcons name="castle" size={24} color={isDark ? '#FFFFFF' : '#222222'} />
+                          )}
                         </View>
                       )}
 
@@ -442,38 +539,52 @@ export const MapPlaceCarousel: React.FC = () => {
                             {place.name}
                           </Text>
                           {Boolean(place.rating) && (
-                            <Text style={[styles.ratingText, { color: theme.colors.primary.default }]}>
-                              ★ {place.rating}
-                            </Text>
+                            <View style={styles.ratingBadge}>
+                              <Ionicons name="star" size={11} color={theme.colors.primary.default} />
+                              <Text style={[styles.ratingText, { color: theme.colors.primary.default }]}>
+                                {place.rating}
+                              </Text>
+                            </View>
                           )}
                         </View>
 
                         {/* Scheduled Time & Category Tag */}
-                        <Text style={[styles.timeScheduleBadge, { color: theme.colors.primary.default }]} numberOfLines={1}>
-                          ⏰ {item.time}
-                        </Text>
+                        <View style={styles.timeBadgeRow}>
+                          <Feather name="clock" size={10.5} color={theme.colors.primary.default} style={{ marginRight: 3 }} />
+                          <Text style={[styles.timeScheduleBadge, { color: theme.colors.primary.default }]} numberOfLines={1}>
+                            {item.time}
+                          </Text>
+                        </View>
 
-                        {/* Brief Description from Output */}
+                        {/* Description: 2 lines when contracted, full when expanded */}
                         {Boolean(place.description || place.reason) && (
-                          <Text style={[styles.descText, { color: theme.colors.text.secondary }]} numberOfLines={2}>
+                          <Text
+                            style={[styles.descText, { color: theme.colors.text.secondary }]}
+                            numberOfLines={isCardExpanded ? undefined : 2}
+                          >
                             {place.description || place.reason}
                           </Text>
                         )}
 
-                        {/* 1-5 Star Interactive Rating */}
-                        <View style={styles.ratingRow}>
-                          <Text style={[styles.rateLabel, { color: theme.colors.text.muted }]}>Rate:</Text>
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <TouchableOpacity
-                              key={star}
-                              style={[styles.starBtn, { backgroundColor: isDark ? '#2E2B27' : '#EFE8DE' }]}
-                              onPress={() => submitPlaceRating(place.id, star)}
-                              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                            >
-                              <Text style={{ fontSize: 10.5, color: '#D95338', fontWeight: '700' }}>{star}★</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
+                        {/* 1-5 Star Interactive Rating: Rendered ONLY when card is expanded */}
+                        {isCardExpanded && (
+                          <View style={styles.ratingRow}>
+                            <Text style={[styles.rateLabel, { color: theme.colors.text.muted }]}>Rate:</Text>
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <TouchableOpacity
+                                key={star}
+                                style={[styles.starBtn, { backgroundColor: isDark ? '#2E2B27' : '#EFE8DE' }]}
+                                onPress={() => submitPlaceRating(place.id, star)}
+                                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                              >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
+                                  <Text style={{ fontSize: 10.5, color: '#D95338', fontWeight: '700' }}>{star}</Text>
+                                  <Ionicons name="star" size={9.5} color="#D95338" />
+                                </View>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -509,8 +620,9 @@ export const MapPlaceCarousel: React.FC = () => {
                 ]}
               >
                 <View style={styles.tipCardHeader}>
+                  <Ionicons name="bulb-outline" size={13} color={theme.colors.brand.heritageGreen} style={{ marginRight: 4 }} />
                   <Text style={[styles.tipCategoryBadge, { color: theme.colors.brand.heritageGreen }]}>
-                    💡 {tip.category ? tip.category.toUpperCase() : 'LOCAL TIP'}
+                    {tip.category ? tip.category.toUpperCase() : 'LOCAL TIP'}
                   </Text>
                 </View>
                 <Text style={[styles.tipCardText, { color: theme.colors.text.primary }]}>
@@ -543,13 +655,14 @@ export const MapPlaceCarousel: React.FC = () => {
           >
             {filteredSearchPlaces.map((place) => {
               const isSelected = selectedPlaceId === place.id;
+              const isCardExpanded = expandedCardId === place.id;
               const imageUri = place.image?.url || place.imageUrl;
 
               return (
                 <TouchableOpacity
                   key={place.id}
                   activeOpacity={0.9}
-                  onPress={() => setSelectedPlaceId(place.id)}
+                  onPress={() => handleCardPress(place.id)}
                   style={[
                     styles.card,
                     {
@@ -557,6 +670,9 @@ export const MapPlaceCarousel: React.FC = () => {
                       backgroundColor: isDark ? '#23211F' : '#FAF6EE',
                       borderColor: isSelected ? theme.colors.primary.default : (isDark ? '#38332E' : '#E8E0D2'),
                       borderWidth: isSelected ? 1.8 : 1,
+                      transform: [{ scale: isSelected ? 1.02 : 0.98 }],
+                      elevation: isSelected ? 6 : 2,
+                      shadowOpacity: isSelected ? 0.25 : 0.08,
                     },
                   ]}
                 >
@@ -566,9 +682,13 @@ export const MapPlaceCarousel: React.FC = () => {
                       <RNImage source={{ uri: imageUri }} style={styles.placeImage} resizeMode="cover" />
                     ) : (
                       <View style={[styles.placeholderThumb, { backgroundColor: isDark ? '#332E2A' : '#EAE3D5' }]}>
-                        <Text style={{ fontSize: 22 }}>
-                          {place.type === 'food' ? '🍲' : place.type === 'market' ? '🛍' : '📍'}
-                        </Text>
+                        {place.type === 'food' ? (
+                          <Ionicons name="restaurant-outline" size={24} color={isDark ? '#FFFFFF' : '#222222'} />
+                        ) : place.type === 'market' ? (
+                          <Feather name="shopping-bag" size={22} color={isDark ? '#FFFFFF' : '#222222'} />
+                        ) : (
+                          <Ionicons name="location-outline" size={24} color={isDark ? '#FFFFFF' : '#222222'} />
+                        )}
                       </View>
                     )}
 
@@ -579,32 +699,43 @@ export const MapPlaceCarousel: React.FC = () => {
                           {place.name}
                         </Text>
                         {Boolean(place.rating || place.feedback?.averageRating) && (
-                          <Text style={[styles.ratingText, { color: theme.colors.primary.default }]}>
-                            ★ {place.rating || place.feedback?.averageRating}
-                          </Text>
+                          <View style={styles.ratingBadge}>
+                            <Ionicons name="star" size={11} color={theme.colors.primary.default} />
+                            <Text style={[styles.ratingText, { color: theme.colors.primary.default }]}>
+                              {place.rating || place.feedback?.averageRating}
+                            </Text>
+                          </View>
                         )}
                       </View>
 
                       {Boolean(place.reason || place.description) && (
-                        <Text style={[styles.descText, { color: theme.colors.text.secondary }]} numberOfLines={2}>
+                        <Text
+                          style={[styles.descText, { color: theme.colors.text.secondary }]}
+                          numberOfLines={isCardExpanded ? undefined : 2}
+                        >
                           {place.reason || place.description}
                         </Text>
                       )}
 
-                      {/* 1-5 Star Interactive Rating */}
-                      <View style={styles.ratingRow}>
-                        <Text style={[styles.rateLabel, { color: theme.colors.text.muted }]}>Rate:</Text>
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <TouchableOpacity
-                            key={star}
-                            style={[styles.starBtn, { backgroundColor: isDark ? '#2E2B27' : '#EFE8DE' }]}
-                            onPress={() => submitPlaceRating(place.id, star)}
-                            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                          >
-                            <Text style={{ fontSize: 10.5, color: '#D95338', fontWeight: '700' }}>{star}★</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
+                      {/* 1-5 Star Interactive Rating: Rendered ONLY when card is expanded */}
+                      {isCardExpanded && (
+                        <View style={styles.ratingRow}>
+                          <Text style={[styles.rateLabel, { color: theme.colors.text.muted }]}>Rate:</Text>
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <TouchableOpacity
+                              key={star}
+                              style={[styles.starBtn, { backgroundColor: isDark ? '#2E2B27' : '#EFE8DE' }]}
+                              onPress={() => submitPlaceRating(place.id, star)}
+                              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                            >
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }}>
+                                <Text style={{ fontSize: 10.5, color: '#D95338', fontWeight: '700' }}>{star}</Text>
+                                <Ionicons name="star" size={9.5} color="#D95338" />
+                              </View>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -625,6 +756,28 @@ const styles = StyleSheet.create({
     right: 14,
     alignItems: 'center',
     zIndex: 90,
+  },
+  exploreHeaderContainer: {
+    marginBottom: 5,
+    paddingHorizontal: 8,
+    alignSelf: 'center',
+  },
+  exploreHeaderText: {
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  exploreHeaderTextDark: {
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.95)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  exploreHeaderTextLight: {
+    color: '#11100E',
+    textShadowColor: '#FFFFFF',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
   },
   carouselWrapper: {
     borderRadius: 22,
@@ -649,6 +802,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  subLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 1,
+  },
   statusText: {
     fontSize: 13.5,
     fontWeight: '800',
@@ -657,23 +819,37 @@ const styles = StyleSheet.create({
   subLocationText: {
     fontSize: 11,
     fontWeight: '600',
-    marginTop: 1,
   },
   headerRightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  timeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginLeft: 6,
+  },
   budgetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
     borderWidth: 1,
-    maxWidth: 130,
+    maxWidth: 160,
+    flexShrink: 1,
   },
   budgetText: {
     fontSize: 11,
     fontWeight: '700',
+    flexShrink: 1,
   },
   closeButton: {
     width: 22,
@@ -700,23 +876,29 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     alignItems: 'center',
   },
-  timeCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  timeChip: {
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    borderRadius: 12,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 2,
+    flexDirection: 'row',
+    gap: 4,
+    minHeight: 33,
   },
-  timeCircleNum: {
-    fontSize: 10.5,
+  timeChipText: {
+    fontSize: 11.5,
     letterSpacing: -0.2,
   },
-  timeCirclePeriod: {
-    fontSize: 8,
-    marginTop: 0.5,
-    letterSpacing: 0.4,
+  timeChipPureNum: {
+    fontSize: 13.5,
+    letterSpacing: -0.2,
+    fontWeight: '800',
+  },
+  timeChipPeriod: {
+    fontSize: 9,
+    letterSpacing: 0.3,
   },
   scrollContainer: {
     paddingVertical: 2,
@@ -752,7 +934,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   placeName: {
-    fontSize: 13.5,
+    fontSize: 15,
     fontWeight: '700',
     flex: 1,
   },
