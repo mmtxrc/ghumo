@@ -348,6 +348,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
     width: '100%',
+    gap: 12,
   },
   formContainer: {
     width: '100%',

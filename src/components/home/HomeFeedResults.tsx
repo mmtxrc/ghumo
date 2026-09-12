@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image as RNImage, Platform, ActivityIndicator, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 
@@ -77,7 +78,7 @@ export const HomeFeedResults: React.FC = () => {
               : isProcessingAI
               ? 'Crafting itinerary...'
               : showSuggestions
-              ? '🔥 Hot Destinations & Verified Spots'
+              ? 'Hot Destinations & Verified Spots'
               : 'Ghumo Discovery')}
         </Text>
         {(hasSearchOrAi || isLoading) && (
@@ -88,7 +89,7 @@ export const HomeFeedResults: React.FC = () => {
             accessibilityRole="button"
             accessibilityLabel="Close results"
           >
-            <Text style={[styles.closeText, { color: theme.colors.text.secondary }]}>✕</Text>
+            <Ionicons name="close" size={15} color={theme.colors.text.secondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -137,11 +138,17 @@ export const HomeFeedResults: React.FC = () => {
                   ) : null}
                   <View style={styles.cardInfo}>
                     <View style={styles.rowBetween}>
-                      <Text style={[styles.itemTitle, { color: theme.colors.text.primary }]}>📍 {item.name}</Text>
+                      <View style={styles.inlineRow}>
+                        <Ionicons name="location-outline" size={14} color={theme.colors.primary.default} />
+                        <Text style={[styles.itemTitle, { color: theme.colors.text.primary }]}>{item.name}</Text>
+                      </View>
                       {Boolean(item.rating || item.feedback?.averageRating) && (
-                        <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
-                          ★ {item.rating || item.feedback?.averageRating}
-                        </Text>
+                        <View style={styles.ratingBadgeContainer}>
+                          <Ionicons name="star" size={11} color={theme.colors.primary.default} />
+                          <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
+                            {item.rating || item.feedback?.averageRating}
+                          </Text>
+                        </View>
                       )}
                     </View>
                     <Text style={[styles.itemCategory, { color: theme.colors.text.secondary }]}>
@@ -185,11 +192,17 @@ export const HomeFeedResults: React.FC = () => {
                   ) : null}
                   <View style={styles.cardInfo}>
                     <View style={styles.rowBetween}>
-                      <Text style={[styles.itemTitle, { color: theme.colors.text.primary }]}>📍 {place.name}</Text>
+                      <View style={styles.inlineRow}>
+                        <Ionicons name="location-outline" size={14} color={theme.colors.primary.default} />
+                        <Text style={[styles.itemTitle, { color: theme.colors.text.primary }]}>{place.name}</Text>
+                      </View>
                       {Boolean(place.rating || place.feedback?.averageRating) && (
-                        <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
-                          ★ {place.rating || place.feedback?.averageRating}
-                        </Text>
+                        <View style={styles.ratingBadgeContainer}>
+                          <Ionicons name="star" size={11} color={theme.colors.primary.default} />
+                          <Text style={[styles.ratingBadge, { color: theme.colors.primary.default }]}>
+                            {place.rating || place.feedback?.averageRating}
+                          </Text>
+                        </View>
                       )}
                     </View>
                     <Text style={[styles.itemCategory, { color: theme.colors.text.secondary }]}>
@@ -204,8 +217,9 @@ export const HomeFeedResults: React.FC = () => {
                     {/* Chained Hidden Gems Badge if present */}
                     {place.hidden_gems && place.hidden_gems.length > 0 && (
                       <View style={[styles.badgePill, { backgroundColor: isDark ? '#2A1A10' : '#FFF3EB' }]}>
+                        <Ionicons name="diamond-outline" size={12} color="#D95338" />
                         <Text style={[styles.badgeText, { color: '#D95338' }]}>
-                          💎 Offbeat: {place.hidden_gems[0].name}
+                          Offbeat: {place.hidden_gems[0].name}
                         </Text>
                       </View>
                     )}
@@ -213,8 +227,9 @@ export const HomeFeedResults: React.FC = () => {
                     {/* Chained Travel Tips Badge if present */}
                     {place.tips && place.tips.length > 0 && (
                       <View style={[styles.badgePill, { backgroundColor: isDark ? '#102A1E' : '#EBFDF3' }]}>
+                        <Ionicons name="bulb-outline" size={12} color="#2E7D5B" />
                         <Text style={[styles.badgeText, { color: '#2E7D5B' }]}>
-                          💡 Tip: {place.tips[0].tip_text || place.tips[0].text}
+                          Tip: {place.tips[0].tip_text || place.tips[0].text}
                         </Text>
                       </View>
                     )}
@@ -242,7 +257,10 @@ export const HomeFeedResults: React.FC = () => {
         {/* ================= 3. CHAINED HIDDEN GEMS & TIPS ================= */}
         {hiddenGems.length > 0 && searchResults.length === 0 && (
           <View style={styles.secondarySection}>
-            <Text style={[styles.sectionHeader, { color: theme.colors.primary.default }]}>💎 Offbeat Hidden Gems</Text>
+            <View style={styles.inlineRow}>
+              <Ionicons name="diamond-outline" size={14} color={theme.colors.primary.default} />
+              <Text style={[styles.sectionHeader, { color: theme.colors.primary.default }]}>Offbeat Hidden Gems</Text>
+            </View>
             {hiddenGems.map((gem, idx) => (
               <View key={idx} style={[styles.secondaryCard, { backgroundColor: isDark ? '#242220' : '#FDFBF7' }]}>
                 <Text style={[styles.gemName, { color: theme.colors.text.primary }]}>{gem.name}</Text>
@@ -256,7 +274,10 @@ export const HomeFeedResults: React.FC = () => {
 
         {tips.length > 0 && searchResults.length === 0 && (
           <View style={styles.secondarySection}>
-            <Text style={[styles.sectionHeader, { color: '#2E7D5B' }]}>💡 Authenticated Travel Tips</Text>
+            <View style={styles.inlineRow}>
+              <Ionicons name="bulb-outline" size={14} color="#2E7D5B" />
+              <Text style={[styles.sectionHeader, { color: '#2E7D5B' }]}>Authenticated Travel Tips</Text>
+            </View>
             {tips.map((tip, idx) => (
               <View key={idx} style={[styles.secondaryCard, { backgroundColor: isDark ? '#242220' : '#FDFBF7' }]}>
                 <Text style={[styles.gemDesc, { color: theme.colors.text.primary }]}>
@@ -270,13 +291,19 @@ export const HomeFeedResults: React.FC = () => {
         {/* ================= 4. AI ITINERARY (POST /itinerary & /itinerary/video) ================= */}
         {aiResponse && (
           <View style={styles.itinerarySection}>
-            <Text style={[styles.itineraryTitle, { color: theme.colors.primary.default }]}>
-              ✨ {aiResponse.title}
-            </Text>
-            {Boolean(aiResponse.budget) && (
-              <Text style={[styles.budgetBadge, { color: theme.colors.text.secondary }]}>
-                💰 Estimated Budget: {aiResponse.budget}
+            <View style={styles.inlineRow}>
+              <Ionicons name="sparkles-outline" size={16} color={theme.colors.primary.default} />
+              <Text style={[styles.itineraryTitle, { color: theme.colors.primary.default }]}>
+                {aiResponse.title}
               </Text>
+            </View>
+            {Boolean(aiResponse.budget) && (
+              <View style={[styles.inlineRow, { marginTop: 4 }]}>
+                <MaterialCommunityIcons name="cash-multiple" size={13} color={theme.colors.text.secondary} />
+                <Text style={[styles.budgetBadge, { color: theme.colors.text.secondary }]}>
+                  Estimated Budget: {aiResponse.budget}
+                </Text>
+              </View>
             )}
 
             {/* Categorized Budget Breakdown Card */}
@@ -286,24 +313,24 @@ export const HomeFeedResults: React.FC = () => {
                 <View style={styles.budgetRow}>
                   {Boolean(aiResponse.budget_breakdown.stay) && (
                     <Text style={[styles.budgetItem, { color: theme.colors.text.secondary }]}>
-                      🏨 Stay: {aiResponse.budget_breakdown.stay}
+                      Stay: {aiResponse.budget_breakdown.stay}
                     </Text>
                   )}
                   {Boolean(aiResponse.budget_breakdown.food) && (
                     <Text style={[styles.budgetItem, { color: theme.colors.text.secondary }]}>
-                      🍲 Food: {aiResponse.budget_breakdown.food}
+                      Food: {aiResponse.budget_breakdown.food}
                     </Text>
                   )}
                 </View>
                 <View style={styles.budgetRow}>
                   {Boolean(aiResponse.budget_breakdown.activities) && (
                     <Text style={[styles.budgetItem, { color: theme.colors.text.secondary }]}>
-                      🎟️ Activities: {aiResponse.budget_breakdown.activities}
+                      Activities: {aiResponse.budget_breakdown.activities}
                     </Text>
                   )}
                   {Boolean(aiResponse.budget_breakdown.transport) && (
                     <Text style={[styles.budgetItem, { color: theme.colors.text.secondary }]}>
-                      🚕 Transport: {aiResponse.budget_breakdown.transport}
+                      Transport: {aiResponse.budget_breakdown.transport}
                     </Text>
                   )}
                 </View>
@@ -320,7 +347,7 @@ export const HomeFeedResults: React.FC = () => {
                     </Text>
                     {Boolean(dayItem.stay_recommendation) && (
                       <Text style={[styles.stayRecommendation, { color: theme.colors.text.secondary }]}>
-                        🏨 Stay: {dayItem.stay_recommendation}
+                        Stay: {dayItem.stay_recommendation}
                       </Text>
                     )}
                     {dayItem.activities &&
@@ -474,6 +501,16 @@ const styles = StyleSheet.create({
     marginTop: 3,
     lineHeight: 16,
   },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ratingBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -491,6 +528,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 6,

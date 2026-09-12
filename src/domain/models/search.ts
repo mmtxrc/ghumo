@@ -56,8 +56,12 @@ export interface PlaceSearchResult {
   name: string;
   city?: string;
   category?: string;
+  type?: string;
   description?: string;
   reason?: string;
+  vibe?: string;
+  dietary?: string;
+  must_try_cuisine?: string;
   history?: string;
   culture?: string;
   must_see?: string;
@@ -66,12 +70,27 @@ export interface PlaceSearchResult {
   lat?: number;
   lng?: number;
   rating?: number;
+  source?: string;
   feedback?: PlaceFeedback;
   imageUrl?: string;
   image?: PlaceImage | null;
   hidden_gems?: HiddenGemItem[];
   tips?: TravelTipItem[];
   nearby_places?: NearbyPoiItem[];
+}
+
+export interface SearchCategorizedData {
+  location?: string;
+  coordinates?: {
+    lat: number;
+    lng: number;
+  };
+  places: PlaceSearchResult[];
+  food: PlaceSearchResult[];
+  markets: PlaceSearchResult[];
+  attractions: PlaceSearchResult[];
+  hidden_gems: PlaceSearchResult[];
+  tips: TravelTipItem[];
 }
 
 export interface SearchApiResponse {
@@ -83,7 +102,8 @@ export interface SearchApiResponse {
   places?: PlaceSearchResult[];
   food?: any[];
   markets?: any[];
-  hidden_gems?: HiddenGemItem[];
+  attractions?: any[];
+  hidden_gems?: any[];
   tips?: TravelTipItem[];
 }
 
@@ -110,6 +130,7 @@ export interface TargetFeedbackResponse {
 
 export interface ISearchService {
   searchPlaces(query: string): Promise<PlaceSearchResult[]>;
+  searchPlacesCategorized(query: string): Promise<SearchCategorizedData>;
   getSuggestions(limit?: number, city?: string, category?: string): Promise<PlaceSearchResult[]>;
   getHiddenGems(location: string): Promise<HiddenGemItem[]>;
   getTips(city?: string, placeId?: number): Promise<TravelTipItem[]>;
@@ -118,7 +139,7 @@ export interface ISearchService {
   searchPlacesStream(
     query: string,
     onProgress: (step: string) => void,
-    onComplete: (results: PlaceSearchResult[]) => void,
+    onComplete: (results: PlaceSearchResult[], categorized?: SearchCategorizedData) => void,
     onError: (error: any) => void
   ): () => void;
 }

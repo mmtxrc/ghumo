@@ -20,12 +20,13 @@ import { MapBackground } from '@/components/home/MapBackground';
 import { GhumoCenterBrand } from '@/components/home/GhumoCenterBrand';
 import { HomeTopBar } from '@/components/home/HomeTopBar';
 import { DynamicBottomBar } from '@/components/home/DynamicBottomBar';
-import { HomeFeedResults } from '@/components/home/HomeFeedResults';
+import { MapPlaceCarousel } from '@/components/home/MapPlaceCarousel';
+import { ExitConfirmationModal } from '@/components/common/ExitConfirmationModal';
 
 export default function HomeScreen() {
   const { isAuthenticated, isGuest } = useAuth();
   const { theme, isDark, fadeAnim } = useTheme();
-  const { isMapVisible } = useHome();
+  const { isMapVisible, showExitModal, setShowExitModal } = useHome();
 
   useEffect(() => {
     logger.app('HomeScreen active state', { isAuthenticated, isGuest, isMapVisible });
@@ -80,20 +81,40 @@ export default function HomeScreen() {
         backgroundColor={theme.colors.background.screen}
       />
 
-      {/* Layer 1: Background Map View or Center Ghumo Logo */}
-      {isMapVisible ? <MapBackground /> : <GhumoCenterBrand />}
+      {/* Layer 1: Background Map View (Kept mounted to preserve location & pins on hide/show) */}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            opacity: isMapVisible ? 1 : 0,
+            zIndex: isMapVisible ? 1 : -1,
+          },
+        ]}
+        pointerEvents={isMapVisible ? 'auto' : 'none'}
+      >
+        <MapBackground />
+      </View>
+
+      {/* Layer 1.5: Center Ghumo Brand Logo when Map is Hidden */}
+      {!isMapVisible && <GhumoCenterBrand />}
 
       {/* Layer 2: Floating Top App Bar */}
       <HomeTopBar />
 
-      {/* Layer 3: Search & AI Results Card (when active) */}
-      <HomeFeedResults />
+      {/* Layer 3: Downward-gravity Map Place Carousel (when results active on map) */}
+      <MapPlaceCarousel />
 
-      {/* Layer 4: Dynamic Morphing Bottom Bar (AI + Search + Floating Map Toggle) */}
+      {/* Layer 4: Dynamic Morphing Bottom Bar (AI + Search + Floating Map Toggle + Category Pills) */}
       <DynamicBottomBar />
 
       {/* Layer 5: Auth Action Loading Overlay */}
       <AuthLoadingOverlay />
+
+      {/* Layer 6: Android Back Exit Confirmation Modal */}
+      <ExitConfirmationModal
+        visible={showExitModal}
+        onCancel={() => setShowExitModal(false)}
+      />
     </Animated.View>
   );
 }

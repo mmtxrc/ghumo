@@ -44,9 +44,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
     logger.auth('Initializing Auth Provider listener...');
     // Subscribe to repository auth changes
     const unsubscribe = repository.onAuthStateChanged((activeUser) => {
+      if (!isMounted) return;
       setUser(activeUser);
       if (activeUser) {
         setIsGuest(false);
@@ -57,7 +59,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [repository]);
 
   const clearError = () => setError(null);

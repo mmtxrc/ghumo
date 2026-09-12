@@ -13,6 +13,7 @@
 import {
   ISearchService,
   PlaceSearchResult,
+  SearchCategorizedData,
   HiddenGemItem,
   TravelTipItem,
   NearbyPoiItem,
@@ -24,80 +25,81 @@ import { querySamplePlaces } from '../sampleDatasets';
 import { logger } from '@/utils/logger';
 
 export class SearchService implements ISearchService {
-  public async searchPlaces(query: string): Promise<PlaceSearchResult[]> {
-    if (!query.trim()) return [];
+  public async searchPlacesCategorized(query: string): Promise<SearchCategorizedData> {
+    if (!query.trim()) {
+      return { places: [], food: [], markets: [], attractions: [], hidden_gems: [], tips: [] };
+    }
 
     try {
-      logger.search(`Searching query: "${query}"`);
+      logger.search(`Searching categorized query: "${query}"`);
       const response = await apiClient.get<any>('/search', { query });
-      
+
       if (response.data) {
-        let places: PlaceSearchResult[] = [];
-        let locationName = response.data.location || query;
-        let coords = response.data.coordinates;
+        const raw = response.data;
+        const locationName = raw.location || query;
+        const coords = raw.coordinates;
 
-        // Parse primary places list
-        if (response.data.places && Array.isArray(response.data.places)) {
-          places = response.data.places.map((p: any, idx: number) => this.mapPlaceItem(p, locationName, idx));
-        } else if (Array.isArray(response.data)) {
-          places = response.data.map((p: any, idx: number) => this.mapPlaceItem(p, locationName, idx));
-        }
+        const places: PlaceSearchResult[] = (raw.places && Array.isArray(raw.places))
+          ? raw.places.map((p: any, idx: number) => this.mapPlaceItem(p, locationName, idx, 'attraction'))
+          : (Array.isArray(raw) ? raw.map((p: any, idx: number) => this.mapPlaceItem(p, locationName, idx, 'attraction')) : []);
 
-        // Extract food or markets if places list was sparse
-        if (places.length === 0 && response.data.food && Array.isArray(response.data.food)) {
-          places = response.data.food.map((f: any, idx: number) => this.mapPlaceItem(f, locationName, idx));
-        }
+        const food: PlaceSearchResult[] = (raw.food && Array.isArray(raw.food))
+          ? raw.food.map((f: any, idx: number) => this.mapPlaceItem(f, locationName, idx, 'food'))
+          : [];
 
-        // Chained Secondary Call 1: Hidden Gems for this location
-        let hiddenGems: HiddenGemItem[] = response.data.hidden_gems || [];
-        if (hiddenGems.length === 0 && locationName) {
-          try {
-            hiddenGems = await this.getHiddenGems(locationName);
-          } catch (e) {
-            logger.warn('SearchService', 'Chained hidden-gems query skipped', e);
+        const markets: PlaceSearchResult[] = (raw.markets && Array.isArray(raw.markets))
+          ? raw.markets.map((m: any, idx: number) => this.mapPlaceItem(m, locationName, idx, 'market'))
+          : [];
+
+        const attractions: PlaceSearchResult[] = (raw.attractions && Array.isArray(raw.attractions))
+          ? raw.attractions.map((a: any, idx: number) => this.mapPlaceItem(a, locationName, idx, 'attraction'))
+          : [];
+
+        const hiddenGems: PlaceSearchResult[] = (raw.hidden_gems && Array.isArray(raw.hidden_gems))
+          ? raw.hidden_gems.map((h: any, idx: number) => this.mapPlaceItem(h, locationName, idx, 'hidden_gem'))
+          : [];
+
+        const tips: TravelTipItem[] = (raw.tips && Array.isArray(raw.tips))
+          ? raw.tips.map((t: any) => ({
+              text: t.text || t.tip_text || '',
+              category: t.category || 'General',
+            }))
+          : [];
+
+        // All collected places for unified view (deduplicated by unique ID)
+        const combinedPlaces = [...places, ...attractions, ...food, ...markets, ...hiddenGems];
+        const seenIds = new Set<string>();
+        const allPlaces: PlaceSearchResult[] = [];
+        for (const p of combinedPlaces) {
+          if (!seenIds.has(p.id)) {
+            seenIds.add(p.id);
+            allPlaces.push(p);
           }
         }
 
-        // Chained Secondary Call 2: Tips for this location
-        let tips: TravelTipItem[] = response.data.tips || [];
-        if (tips.length === 0 && locationName) {
-          try {
-            tips = await this.getTips(locationName);
-          } catch (e) {
-            logger.warn('SearchService', 'Chained tips query skipped', e);
-          }
-        }
-
-        // Attach chained secondary data to primary places
-        if (places.length > 0) {
-          places[0].hidden_gems = hiddenGems;
-          places[0].tips = tips;
-
-          // Chained Secondary Call 3: Nearby POIs if coordinates exist
-          if (coords && coords.lat && coords.lng) {
-            try {
-              const nearby = await this.getNearby(coords.lat, coords.lng, 5000);
-              places[0].nearby_places = [...(nearby.places || []), ...(nearby.food || [])];
-            } catch (e) {
-              logger.warn('SearchService', 'Chained nearby query skipped', e);
-            }
-          }
-        }
-
-        if (places.length > 0) {
-          return places;
-        }
+        return {
+          location: locationName,
+          coordinates: coords,
+          places: allPlaces.length > 0 ? allPlaces : places,
+          food,
+          markets,
+          attractions,
+          hidden_gems: hiddenGems,
+          tips,
+        };
       }
     } catch (err: any) {
       logger.warn('SearchService', 'Backend search unreachable, falling back to curated dataset', err?.message);
     }
 
-    // Fallback to sample places dataset with zero-crash null handling
+    // Fallback categorized structure from sample dataset
     const matched = querySamplePlaces(query);
-    return matched.map((p, idx) => ({
+    const mapped = matched.map((p, idx) => ({
       id: p.id || `sample_${idx}`,
       name: p.name || 'Travel Landmark',
+      city: p.city || 'Delhi',
       category: `${p.city || 'Delhi'} • ${p.category || 'Spot'}`,
+      type: p.category?.toLowerCase().includes('food') ? 'food' : 'attraction',
       description: p.reason || p.must_see || p.history || 'Famous travel destination.',
       reason: p.reason,
       history: p.history,
@@ -111,6 +113,28 @@ export class SearchService implements ISearchService {
       imageUrl: p.imageUrl,
       image: p.imageUrl ? { url: p.imageUrl, provider: 'wikimedia', attribution: 'Wikimedia Commons' } : null,
     }));
+
+    const foodFallback = mapped.filter((p) => p.type === 'food');
+    const attractionsFallback = mapped.filter((p) => p.type !== 'food');
+
+    return {
+      location: query,
+      coordinates: { lat: 28.6139, lng: 77.2090 },
+      places: mapped,
+      food: foodFallback,
+      markets: [],
+      attractions: attractionsFallback,
+      hidden_gems: [],
+      tips: [
+        { text: 'Visit early morning to avoid peak crowds and get the best light.', category: 'Culture' },
+        { text: 'Metro is the most convenient way to travel across Delhi.', category: 'Logistics' },
+      ],
+    };
+  }
+
+  public async searchPlaces(query: string): Promise<PlaceSearchResult[]> {
+    const categorized = await this.searchPlacesCategorized(query);
+    return categorized.places;
   }
 
   public async getSuggestions(limit: number = 10, city?: string, category?: string): Promise<PlaceSearchResult[]> {
@@ -245,21 +269,28 @@ export class SearchService implements ISearchService {
     };
   }
 
-  private mapPlaceItem(p: any, fallbackLocation: string, idx: number): PlaceSearchResult {
+  private mapPlaceItem(p: any, fallbackLocation: string, idx: number, defaultType: string = 'attraction'): PlaceSearchResult {
     const rawImage = p.image || null;
     const imageUrl =
       typeof rawImage === 'string'
         ? rawImage
         : rawImage?.url || p.imageUrl || p.photoURL || undefined;
 
+    const safeNameSlug = p.name ? String(p.name).toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 24) : 'spot';
+    const uniqueId = String(p.id || p.place_id || `${defaultType}_${idx}_${safeNameSlug}`);
+
     return {
-      id: String(p.id || p.place_id || `place_${idx}`),
+      id: uniqueId,
       place_id: typeof p.id === 'number' ? p.id : typeof p.place_id === 'number' ? p.place_id : undefined,
       name: p.name || 'Must-See Spot',
       city: p.city || fallbackLocation,
-      category: p.category || p.type || 'Travel Destination',
+      category: p.category || (p.type ? p.type.toUpperCase() : defaultType.toUpperCase()),
+      type: p.type || defaultType,
       description: p.description || p.reason || p.must_see || p.history || p.culture || 'Featured travel destination.',
       reason: p.reason,
+      vibe: p.vibe,
+      dietary: p.dietary,
+      must_try_cuisine: p.must_try_cuisine,
       history: p.history,
       culture: p.culture,
       must_see: p.must_see,
@@ -268,6 +299,7 @@ export class SearchService implements ISearchService {
       lat: typeof p.lat === 'number' ? p.lat : undefined,
       lng: typeof p.lng === 'number' ? p.lng : undefined,
       rating: p.rating || p.feedback?.averageRating || 4.8,
+      source: p.source,
       feedback: p.feedback
         ? {
             averageRating: p.feedback.averageRating || p.feedback.average_rating || 4.8,

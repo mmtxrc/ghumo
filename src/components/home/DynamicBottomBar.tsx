@@ -9,7 +9,7 @@
  * - Prompt send button: Paper plane icon embedded directly inside the prompt text box.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import {
   Keyboard,
   Dimensions,
 } from 'react-native';
-import { Gesture, GestureDetector, type PanGesture } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView, type PanGesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -32,11 +32,20 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import Svg, { Path, Circle, Line, Rect } from 'react-native-svg';
+import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '@/context/themeContext';
 import { useHome } from '@/context/homeContext';
 import { AttachmentPickerView } from './AttachmentPickerView';
 import { SearchView } from './SearchView';
 import { PromptView } from './PromptView';
+import { ProcessingOutline } from './ProcessingOutline';
+
+interface FilterPillItem {
+  id: string;
+  label: string;
+  iconName?: string;
+  iconPack?: 'Ionicons' | 'Feather' | 'MaterialCommunityIcons' | 'FontAwesome5';
+}
 
 const SEARCH_BAR_HEIGHT = 52;
 const ACTION_BUTTON_WIDTH = 54;
@@ -60,8 +69,17 @@ export const DynamicBottomBar: React.FC = () => {
     addAttachment,
     performSearch,
     submitAIPrompt,
+    isSearching,
+    isProcessingAI,
+    searchResults,
+    categorizedResults,
+    activeMapCategory,
+    setActiveMapCategory,
+    aiResponse,
     isMapVisible,
     toggleMapVisible,
+    isUsingCachedResult,
+    refetchCurrentResults,
   } = useHome();
 
   const [isAttachmentPickerOpen, setIsAttachmentPickerOpen] = useState(false);
@@ -70,6 +88,151 @@ export const DynamicBottomBar: React.FC = () => {
 
   const searchInputRef = useRef<TextInput>(null);
   const aiInputRef = useRef<TextInput>(null);
+
+  // Dynamic filter pills derived directly from search output headers or itinerary days
+  const availableFilterPills = useMemo<FilterPillItem[]>(() => {
+    const pills: FilterPillItem[] = [];
+
+    if (categorizedResults) {
+      if (categorizedResults.food && categorizedResults.food.length > 0) {
+        pills.push({ id: 'food', label: `Food (${categorizedResults.food.length})`, iconName: 'restaurant-outline', iconPack: 'Ionicons' });
+      }
+      if (categorizedResults.markets && categorizedResults.markets.length > 0) {
+        pills.push({ id: 'markets', label: `Markets (${categorizedResults.markets.length})`, iconName: 'shopping-bag', iconPack: 'Feather' });
+      }
+      if (categorizedResults.attractions && categorizedResults.attractions.length > 0) {
+        pills.push({ id: 'attractions', label: `Attractions (${categorizedResults.attractions.length})`, iconName: 'landmark', iconPack: 'FontAwesome5' });
+      }
+      if (categorizedResults.hidden_gems && categorizedResults.hidden_gems.length > 0) {
+        pills.push({ id: 'hidden_gems', label: `Hidden Gems (${categorizedResults.hidden_gems.length})`, iconName: 'diamond-outline', iconPack: 'Ionicons' });
+      }
+      if (categorizedResults.tips && categorizedResults.tips.length > 0) {
+        pills.push({ id: 'tips', label: `Tips (${categorizedResults.tips.length})`, iconName: 'bulb-outline', iconPack: 'Ionicons' });
+      }
+      if (pills.length > 1) {
+        pills.unshift({ id: 'all', label: `All Places (${categorizedResults.places.length})`, iconName: 'location-outline', iconPack: 'Ionicons' });
+      }
+    } else if (searchResults.length > 0) {
+      pills.push({ id: 'all', label: `All Places (${searchResults.length})`, iconName: 'location-outline', iconPack: 'Ionicons' });
+    } else if (aiResponse) {
+      if (aiResponse.days && aiResponse.days.length > 0) {
+        aiResponse.days.forEach((day, idx) => {
+          pills.push({
+            id: `day_${idx}`,
+            label: `Day ${day.dayNumber || day.day || idx + 1}`,
+            iconName: 'calendar-outline',
+            iconPack: 'Ionicons',
+          });
+        });
+      } else {
+        pills.push({ id: 'day_0', label: 'Day 1', iconName: 'calendar-outline', iconPack: 'Ionicons' });
+      }
+    }
+
+    // When viewing locally cached results, display a matching Refresh pill as the first item
+    if (isUsingCachedResult && pills.length > 0) {
+      pills.unshift({ id: 'refresh', label: '', iconName: 'refresh-cw', iconPack: 'Feather' });
+    }
+
+    return pills;
+  }, [categorizedResults, searchResults, aiResponse, isUsingCachedResult]);
+
+  // Horizontal coupling physics animations (expansion of active pill, contraction of adjacent pills/map button)
+  const pillHorizontalExpandAnims = useRef<RNAnimated.Value[]>(
+    Array.from({ length: 12 }, () => new RNAnimated.Value(0))
+  ).current;
+  const mapButtonDisplaceAnim = useRef(new RNAnimated.Value(0)).current;
+
+  const handlePillPress = (catId: string, index: number) => {
+    // If user tapped the Refresh pill, trigger fresh refetch from backend
+    if (catId === 'refresh') {
+      refetchCurrentResults();
+      return;
+    }
+    // Horizontal coupling animation:
+    // 1. Tapped pill expands horizontally (+16px)
+    // 2. Left neighbor (or map button if first pill) contracts by (-8px)
+    // 3. Right neighbor contracts by (-8px)
+    const animations: RNAnimated.CompositeAnimation[] = [];
+
+    // Tapped pill expansion spring
+    animations.push(
+      RNAnimated.sequence([
+        RNAnimated.spring(pillHorizontalExpandAnims[index], {
+          toValue: 16,
+          speed: 28,
+          bounciness: 10,
+          useNativeDriver: false,
+        }),
+        RNAnimated.spring(pillHorizontalExpandAnims[index], {
+          toValue: 0,
+          speed: 22,
+          bounciness: 6,
+          useNativeDriver: false,
+        }),
+      ])
+    );
+
+    // Left neighbor or Map button contraction
+    if (index === 0) {
+      animations.push(
+        RNAnimated.sequence([
+          RNAnimated.spring(mapButtonDisplaceAnim, {
+            toValue: -8,
+            speed: 28,
+            bounciness: 10,
+            useNativeDriver: false,
+          }),
+          RNAnimated.spring(mapButtonDisplaceAnim, {
+            toValue: 0,
+            speed: 22,
+            bounciness: 6,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+    } else if (pillHorizontalExpandAnims[index - 1]) {
+      animations.push(
+        RNAnimated.sequence([
+          RNAnimated.spring(pillHorizontalExpandAnims[index - 1], {
+            toValue: -8,
+            speed: 28,
+            bounciness: 10,
+            useNativeDriver: false,
+          }),
+          RNAnimated.spring(pillHorizontalExpandAnims[index - 1], {
+            toValue: 0,
+            speed: 22,
+            bounciness: 6,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+    }
+
+    // Right neighbor contraction
+    if (pillHorizontalExpandAnims[index + 1]) {
+      animations.push(
+        RNAnimated.sequence([
+          RNAnimated.spring(pillHorizontalExpandAnims[index + 1], {
+            toValue: -8,
+            speed: 28,
+            bounciness: 10,
+            useNativeDriver: false,
+          }),
+          RNAnimated.spring(pillHorizontalExpandAnims[index + 1], {
+            toValue: 0,
+            speed: 22,
+            bounciness: 6,
+            useNativeDriver: false,
+          }),
+        ])
+      );
+    }
+
+    RNAnimated.parallel(animations).start();
+    setActiveMapCategory(catId);
+  };
 
   // Screen calculations
   const windowDims = Dimensions.get('window');
@@ -116,8 +279,8 @@ export const DynamicBottomBar: React.FC = () => {
     setIsExpanded(false);
     setIsAttachmentPickerOpen(false);
     const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-    sheetTranslateY.value = withTiming(currentHeight + 50, { duration: 200 });
-    dragProgress.value = withTiming(0, { duration: 200 });
+    sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 220 });
+    dragProgress.value = withTiming(0, { duration: 220 });
   }, [setIsExpanded, isAttachmentPickerOpen, dragProgress, sheetTranslateY, ATTACHMENT_PICKER_HEIGHT, expandedOverlayHeight]);
 
   const animateTo = useCallback(
@@ -133,13 +296,13 @@ export const DynamicBottomBar: React.FC = () => {
 
   // Sync isExpanded state if changed externally
   useEffect(() => {
+    const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
     if (isExpanded) {
       dragProgress.value = withSpring(1, { damping: 24, stiffness: 240, mass: 0.8 });
       sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 240, mass: 0.8 });
     } else {
-      const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-      sheetTranslateY.value = withTiming(currentHeight + 50, { duration: 200 });
-      dragProgress.value = withTiming(0, { duration: 200 });
+      sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 220 });
+      dragProgress.value = withTiming(0, { duration: 220 });
     }
   }, [isExpanded, isAttachmentPickerOpen, dragProgress, sheetTranslateY, ATTACHMENT_PICKER_HEIGHT, expandedOverlayHeight]);
 
@@ -227,26 +390,29 @@ export const DynamicBottomBar: React.FC = () => {
   // Map button: Expands downwards, action button contracts from top by the same amount, with icon fade
   const handleToggleMap = () => {
     mapExpandAnim.setValue(14);
+    mapExpandAnim.setValue(18);
     RNAnimated.spring(mapExpandAnim, {
       toValue: 0,
-      damping: 14,
-      stiffness: 280,
-      mass: 0.65,
+      damping: 15,
+      stiffness: 260,
+      mass: 0.7,
       useNativeDriver: false,
     }).start();
 
-    RNAnimated.timing(mapIconFadeAnim, {
-      toValue: 0,
-      duration: 70,
-      useNativeDriver: false,
-    }).start(() => {
-      toggleMapVisible();
+    RNAnimated.sequence([
+      RNAnimated.timing(mapIconFadeAnim, {
+        toValue: 0.15,
+        duration: 70,
+        useNativeDriver: true,
+      }),
       RNAnimated.timing(mapIconFadeAnim, {
         toValue: 1,
-        duration: 110,
-        useNativeDriver: false,
-      }).start();
-    });
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    toggleMapVisible();
   };
 
   // Trigger expansion into attachment picker view
@@ -255,55 +421,100 @@ export const DynamicBottomBar: React.FC = () => {
     openSheet();
   };
 
-  // Zone 1 Header & Input Field Drag Gesture (React Native Gesture Handler)
-  const headerPanGesture = Gesture.Pan()
-    .activeOffsetY([-8, 8])
-    .failOffsetX([-25, 25])
-    .onStart(() => {
-      'worklet';
-      startSheetY.value = sheetTranslateY.value;
-    })
-    .onUpdate((event) => {
-      'worklet';
-      if (event.translationY > 0) {
-        sheetTranslateY.value = startSheetY.value + event.translationY;
-      } else {
-        sheetTranslateY.value = startSheetY.value + event.translationY * 0.15;
-      }
-      const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-      dragProgress.value = interpolate(
-        sheetTranslateY.value,
-        [currentHeight + 50, 0],
-        [0, 1],
-        Extrapolation.CLAMP
-      );
-    })
-    .onEnd((event) => {
-      'worklet';
-      if (event.translationY > 60 || event.velocityY > 250) {
+  // Zone 1 Top Handle Drag Gesture (memoized instance for sheet top handle)
+  const handlePanGesture = useMemo(() => {
+    return Gesture.Pan()
+      .activeOffsetY([-8, 8])
+      .failOffsetX([-25, 25])
+      .onStart(() => {
+        'worklet';
+        startSheetY.value = sheetTranslateY.value;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        if (event.translationY > 0) {
+          sheetTranslateY.value = startSheetY.value + event.translationY;
+        } else {
+          sheetTranslateY.value = startSheetY.value + event.translationY * 0.15;
+        }
         const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-        sheetTranslateY.value = withTiming(currentHeight + 50, { duration: 200 });
-        dragProgress.value = withTiming(0, { duration: 200 }, (finished) => {
-          if (finished) {
-            runOnJS(closeSheet)();
-          }
-        });
-      } else {
-        sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 260 });
-        dragProgress.value = withSpring(1, { damping: 24, stiffness: 260 });
-      }
-    });
+        dragProgress.value = interpolate(
+          sheetTranslateY.value,
+          [currentHeight + 50, 0],
+          [0, 1],
+          Extrapolation.CLAMP
+        );
+      })
+      .onEnd((event) => {
+        'worklet';
+        if (event.translationY > 60 || event.velocityY > 250) {
+          const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+          sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 200 });
+          dragProgress.value = withTiming(0, { duration: 200 }, (finished) => {
+            if (finished) {
+              runOnJS(closeSheet)();
+            }
+          });
+        } else {
+          sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 260 });
+          dragProgress.value = withSpring(1, { damping: 24, stiffness: 260 });
+        }
+      });
+  }, [isAttachmentPickerOpen, expandedOverlayHeight, closeSheet, sheetTranslateY, startSheetY, dragProgress, ATTACHMENT_PICKER_HEIGHT]);
 
-  // Whole resting bottom bar swipe-up Gesture to open Search/Prompt view
-  const bottomBarPanGesture = Gesture.Pan()
-    .activeOffsetY([-8, 8])
-    .failOffsetX([-25, 25])
-    .onEnd((event) => {
-      'worklet';
-      if (event.translationY < -15 || event.velocityY < -200) {
-        runOnJS(openSheet)();
-      }
-    });
+  // Zone 1 Header & Input Field Drag Gesture (memoized separate instance for child search/prompt views)
+  const headerPanGesture = useMemo(() => {
+    return Gesture.Pan()
+      .activeOffsetY([-8, 8])
+      .failOffsetX([-25, 25])
+      .onStart(() => {
+        'worklet';
+        startSheetY.value = sheetTranslateY.value;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        if (event.translationY > 0) {
+          sheetTranslateY.value = startSheetY.value + event.translationY;
+        } else {
+          sheetTranslateY.value = startSheetY.value + event.translationY * 0.15;
+        }
+        const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+        dragProgress.value = interpolate(
+          sheetTranslateY.value,
+          [currentHeight + 50, 0],
+          [0, 1],
+          Extrapolation.CLAMP
+        );
+      })
+      .onEnd((event) => {
+        'worklet';
+        if (event.translationY > 60 || event.velocityY > 250) {
+          const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+          sheetTranslateY.value = withTiming(currentHeight + 80, { duration: 200 });
+          dragProgress.value = withTiming(0, { duration: 200 }, (finished) => {
+            if (finished) {
+              runOnJS(closeSheet)();
+            }
+          });
+        } else {
+          sheetTranslateY.value = withSpring(0, { damping: 24, stiffness: 260 });
+          dragProgress.value = withSpring(1, { damping: 24, stiffness: 260 });
+        }
+      });
+  }, [isAttachmentPickerOpen, expandedOverlayHeight, closeSheet, sheetTranslateY, startSheetY, dragProgress, ATTACHMENT_PICKER_HEIGHT]);
+
+  // Whole resting bottom bar swipe-up Gesture to open Search/Prompt view (memoized)
+  const bottomBarPanGesture = useMemo(() => {
+    return Gesture.Pan()
+      .activeOffsetY([-8, 8])
+      .failOffsetX([-25, 25])
+      .onEnd((event) => {
+        'worklet';
+        if (event.translationY < -15 || event.velocityY < -200) {
+          runOnJS(openSheet)();
+        }
+      });
+  }, [openSheet]);
 
   const handleSearchSubmit = () => {
     if (searchQuery.trim()) {
@@ -327,31 +538,46 @@ export const DynamicBottomBar: React.FC = () => {
   // Reanimated Animated Styles for buttery-smooth 60/120fps UI Thread Rendering
   const expandedSheetAnimatedStyle = useAnimatedStyle(() => {
     const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
-    const transY = isExpanded
-      ? sheetTranslateY.value
-      : interpolate(dragProgress.value, [0, 1], [currentHeight + 50, 0], Extrapolation.CLAMP);
-
-    const opacity = interpolate(dragProgress.value, [0, 0.05, 1], [0, 1, 1], Extrapolation.CLAMP);
+    const progress = interpolate(
+      sheetTranslateY.value,
+      [currentHeight + 50, 0],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
+    const opacity = interpolate(progress, [0, 0.05, 1], [0, 1, 1], Extrapolation.CLAMP);
 
     return {
-      transform: [{ translateY: transY }],
+      transform: [{ translateY: sheetTranslateY.value }],
       opacity,
+      display: sheetTranslateY.value >= currentHeight + 40 ? 'none' : 'flex',
     };
   });
 
   const scrimAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(dragProgress.value, [0, 1], [0, 0.45], Extrapolation.CLAMP);
+    const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+    const progress = interpolate(
+      sheetTranslateY.value,
+      [currentHeight + 50, 0],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
     return {
-      opacity,
+      opacity: interpolate(progress, [0, 1], [0, 0.45], Extrapolation.CLAMP),
+      display: progress <= 0.01 ? 'none' : 'flex',
     };
   });
 
   const restingBarAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(dragProgress.value, [0, 0.25], [1, 0], Extrapolation.CLAMP);
-    const transY = interpolate(dragProgress.value, [0, 1], [0, 30], Extrapolation.CLAMP);
+    const currentHeight = isAttachmentPickerOpen ? ATTACHMENT_PICKER_HEIGHT : expandedOverlayHeight;
+    const progress = interpolate(
+      sheetTranslateY.value,
+      [currentHeight + 50, 0],
+      [0, 1],
+      Extrapolation.CLAMP
+    );
     return {
-      opacity,
-      transform: [{ translateY: transY }],
+      opacity: interpolate(progress, [0, 0.25], [1, 0], Extrapolation.CLAMP),
+      transform: [{ translateY: interpolate(progress, [0, 1], [0, 30], Extrapolation.CLAMP) }],
     };
   });
 
@@ -415,13 +641,14 @@ export const DynamicBottomBar: React.FC = () => {
           ]}
           pointerEvents={isExpanded ? 'none' : 'box-none'}
         >
-          {/* Floating Map Toggle Button (Aligned with left edge above action button) */}
+          {/* Floating Map Toggle Button + Category Filter Pills (Aligned above action button) */}
           <View style={styles.floatingToggleRow} pointerEvents="box-none">
             <RNAnimated.View
               style={[
                 styles.floatingToggleButton,
                 {
                   height: dynamicMapButtonHeight,
+                  transform: [{ translateX: mapButtonDisplaceAnim }],
                   backgroundColor: isDark ? '#1F1D1B' : '#FFFFFF',
                   borderColor: isMapVisible ? theme.colors.primary.default : theme.colors.border.default,
                 },
@@ -436,19 +663,135 @@ export const DynamicBottomBar: React.FC = () => {
               >
                 <RNAnimated.View style={{ opacity: mapIconFadeAnim, alignItems: 'center', justifyContent: 'center' }}>
                   {isMapVisible ? (
-                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <Circle cx="12" cy="12" r="3.2" fill={theme.colors.primary.default} stroke={theme.colors.primary.default} />
-                    </Svg>
+                    <Feather name="map" size={19} color={theme.colors.primary.default} />
                   ) : (
-                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <Path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                      <Line x1="1" y1="1" x2="23" y2="23" stroke={theme.colors.primary.default} strokeWidth="2" />
-                    </Svg>
+                    <MaterialCommunityIcons name="map-outline" size={20} color={theme.colors.text.muted} />
                   )}
                 </RNAnimated.View>
               </TouchableOpacity>
             </RNAnimated.View>
+
+            {/* Dynamic Filter Pills beside Map Button (only when Map is active and results exist) */}
+            {isMapVisible && availableFilterPills.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled={true}
+                contentContainerStyle={styles.pillsScrollContainer}
+                style={styles.pillsScrollView}
+              >
+                {availableFilterPills.map((pill: FilterPillItem, idx: number) => {
+                  const isActive = activeMapCategory === pill.id;
+                  const expandAnim = pillHorizontalExpandAnims[idx] || new RNAnimated.Value(0);
+                  const iconColor = isActive ? theme.colors.primary.default : theme.colors.text.primary;
+
+                  return (
+                    <RNAnimated.View
+                      key={pill.id}
+                      style={{
+                        transform: [
+                          {
+                            scaleX: expandAnim.interpolate({
+                              inputRange: [-8, 0, 16],
+                              outputRange: [0.88, 1, 1.14],
+                            }),
+                          },
+                        ],
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.mapCategoryPill,
+                          {
+                            backgroundColor: isActive
+                              ? (isDark ? '#3D2820' : '#FCEEE8')
+                              : (isDark ? 'rgba(35,32,29,0.95)' : 'rgba(255,255,255,0.95)'),
+                            borderColor: isActive ? theme.colors.primary.default : (isDark ? '#3D3732' : '#E0D6C8'),
+                            borderWidth: isActive ? 1.6 : 1,
+                            paddingHorizontal: pill.label ? 12 : 10,
+                          },
+                        ]}
+                        onPress={() => handlePillPress(pill.id, idx)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.pillInnerRow}>
+                          {pill.iconPack === 'Ionicons' && pill.iconName && (
+                            <Ionicons name={pill.iconName as any} size={14} color={iconColor} />
+                          )}
+                          {pill.iconPack === 'Feather' && pill.iconName && (
+                            <Feather name={pill.iconName as any} size={13} color={iconColor} />
+                          )}
+                          {pill.iconPack === 'FontAwesome5' && pill.iconName && (
+                            <FontAwesome5 name={pill.iconName as any} size={12} color={iconColor} />
+                          )}
+                          {pill.iconPack === 'MaterialCommunityIcons' && pill.iconName && (
+                            <MaterialCommunityIcons name={pill.iconName as any} size={14} color={iconColor} />
+                          )}
+                          {Boolean(pill.label) && (
+                            <Text
+                              style={[
+                                styles.mapPillText,
+                                {
+                                  color: iconColor,
+                                  fontWeight: isActive ? '700' : '600',
+                                },
+                              ]}
+                            >
+                              {pill.label}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </RNAnimated.View>
+                  );
+                })}
+              </ScrollView>
+            ) : (!isSearching && !isProcessingAI) ? (
+              /* Dynamic Mode Title: "Search" vs "Plan Your Itinerary" (in line with show/hide map button) */
+              <View style={styles.floatingHeaderContainer} pointerEvents="none">
+                <RNAnimated.View
+                  style={[
+                    styles.floatingHeaderItem,
+                    {
+                      opacity: searchModeOpacity,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.floatingHeaderText,
+                      isDark
+                        ? styles.floatingHeaderTextDark
+                        : [styles.floatingHeaderTextLight, { color: theme.colors.primary.default }],
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Search
+                  </Text>
+                </RNAnimated.View>
+                <RNAnimated.View
+                  style={[
+                    styles.floatingHeaderItem,
+                    styles.floatingHeaderItemAbsolute,
+                    {
+                      opacity: aiModeOpacity,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.floatingHeaderText,
+                      isDark
+                        ? styles.floatingHeaderTextDark
+                        : [styles.floatingHeaderTextLight, { color: theme.colors.primary.default }],
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Plan Your Itinerary
+                  </Text>
+                </RNAnimated.View>
+              </View>
+            ) : null}
           </View>
 
           {/* Main Row: Single GestureDetector wrapping the ENTIRE barRow */}
@@ -502,165 +845,177 @@ export const DynamicBottomBar: React.FC = () => {
 
               {/* ================= RIGHT TEXT BOX (Contracts as Action Button Expands) ================= */}
               <RNAnimated.View
-                style={[
-                  styles.restingTextCard,
-                  {
-                    width: dynamicTextCardWidth,
-                    height: activeMode === 'ai' ? promptBoxHeight : SEARCH_BAR_HEIGHT,
-                    backgroundColor: isDark ? '#1D1B19' : theme.colors.background.surface,
-                    borderColor: activeMode === 'ai' ? theme.colors.primary.default : theme.colors.border.default,
-                    borderWidth: activeMode === 'ai' ? 1.5 : 1,
-                  },
-                ]}
+                style={{
+                  width: dynamicTextCardWidth,
+                }}
               >
-                {/* Top Drag Handle */}
-                <View style={styles.handleContainer} pointerEvents="none">
-                  <View style={[styles.handleBar, { backgroundColor: isDark ? '#4A443F' : '#DED8D1' }]} />
-                </View>
-
-                {/* Resting Content Container */}
-                <RNAnimated.View
-                  style={[
-                    styles.restingContentWrapper,
-                    {
-                      opacity: contentFadeAnim,
-                    },
-                  ]}
+                <ProcessingOutline
+                  isProcessing={activeMode === 'search' ? isSearching : isProcessingAI}
+                  borderRadius={26}
+                  strokeWidth={2.0}
                 >
-                  {activeMode === 'search' ? (
-                    /* ================= SEARCH INPUT FIELD (Default) ================= */
-                    <RNAnimated.View style={[styles.inputRowContent, { opacity: searchModeOpacity }]}>
-                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round">
-                        <Circle cx="11" cy="11" r="8" />
-                        <Line x1="21" y1="21" x2="16.65" y2="16.65" />
-                      </Svg>
+                  <RNAnimated.View
+                    style={[
+                      styles.restingTextCard,
+                      {
+                        width: '100%',
+                        height: activeMode === 'ai' ? promptBoxHeight : SEARCH_BAR_HEIGHT,
+                        backgroundColor: isDark ? '#1D1B19' : theme.colors.background.surface,
+                        borderColor: (activeMode === 'search' ? isSearching : isProcessingAI)
+                          ? 'transparent'
+                          : activeMode === 'ai'
+                            ? theme.colors.primary.default
+                            : theme.colors.border.default,
+                        borderWidth: activeMode === 'ai' ? 1.5 : 1,
+                      },
+                    ]}
+                  >
+                    {/* Top Drag Handle */}
+                    <View style={styles.handleContainer} pointerEvents="none">
+                      <View style={[styles.handleBar, { backgroundColor: isDark ? '#4A443F' : '#DED8D1' }]} />
+                    </View>
 
-                      <TextInput
-                        ref={searchInputRef}
-                        style={[styles.textInput, { color: theme.colors.text.primary }]}
-                        placeholder="Search or swipe up..."
-                        placeholderTextColor={theme.colors.text.muted}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        returnKeyType="search"
-                        onSubmitEditing={handleSearchSubmit}
-                        scrollEnabled={false}
-                        autoCapitalize="words"
-                        selectionColor={theme.colors.primary.default}
-                      />
+                    {/* Resting Content Container */}
+                    <RNAnimated.View
+                      style={[
+                        styles.restingContentWrapper,
+                        {
+                          opacity: contentFadeAnim,
+                        },
+                      ]}
+                    >
+                      {activeMode === 'search' ? (
+                        /* ================= SEARCH INPUT FIELD (Default) ================= */
+                        <RNAnimated.View style={[styles.inputRowContent, { opacity: searchModeOpacity }]}>
+                          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round">
+                            <Circle cx="11" cy="11" r="8" />
+                            <Line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </Svg>
 
-                      {hasSearchText && (
-                        <TouchableOpacity
-                          onPress={clearSearchQuery}
-                          style={styles.clearButton}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Clear search text"
-                        >
-                          <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
-                            <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                          </View>
-                        </TouchableOpacity>
+                          <TextInput
+                            ref={searchInputRef}
+                            style={[styles.textInput, { color: theme.colors.text.primary }]}
+                            placeholder="Search or swipe up..."
+                            placeholderTextColor={theme.colors.text.muted}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            returnKeyType="search"
+                            onSubmitEditing={handleSearchSubmit}
+                            scrollEnabled={false}
+                            autoCapitalize="words"
+                            selectionColor={theme.colors.primary.default}
+                          />
+
+                          {hasSearchText && (
+                            <TouchableOpacity
+                              onPress={clearSearchQuery}
+                              style={styles.clearButton}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                              accessibilityLabel="Clear search text"
+                            >
+                              <Ionicons name="backspace-outline" size={18} color={theme.colors.text.secondary} />
+                            </TouchableOpacity>
+                          )}
+
+                          <TouchableOpacity
+                            onPress={handleSearchSubmit}
+                            style={[styles.submitIconBtn, { backgroundColor: theme.colors.primary.default }]}
+                            accessibilityLabel="Search"
+                          >
+                            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round">
+                              <Path d="M5 12h14" />
+                              <Path d="m12 5 7 7-7 7" />
+                            </Svg>
+                          </TouchableOpacity>
+                        </RNAnimated.View>
+                      ) : (
+                        /* ================= PROMPT INPUT FIELD ================= */
+                        <RNAnimated.View style={[styles.inputRowContent, { opacity: aiModeOpacity }]}>
+                          {/* '+' Attachment Button */}
+                          <TouchableOpacity
+                            style={[styles.plusButton, { backgroundColor: isDark ? '#2B2824' : '#EFE8DE' }]}
+                            activeOpacity={0.7}
+                            onPress={handleOpenAttachmentPicker}
+                            accessibilityRole="button"
+                            accessibilityLabel="Add attachment"
+                          >
+                            <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary.default} strokeWidth="2.6" strokeLinecap="round">
+                              <Line x1="12" y1="5" x2="12" y2="19" />
+                              <Line x1="5" y1="12" x2="19" y2="12" />
+                            </Svg>
+                          </TouchableOpacity>
+
+                          {/* Multiline Prompt TextInput */}
+                          <TextInput
+                            ref={aiInputRef}
+                            style={[styles.textInput, { color: theme.colors.text.primary }]}
+                            placeholder="Ask Ghumo AI or swipe up..."
+                            placeholderTextColor={theme.colors.text.muted}
+                            value={aiPrompt}
+                            maxLength={MAX_PROMPT_LENGTH}
+                            onChangeText={(text) => {
+                              const trimmed = text.slice(0, MAX_PROMPT_LENGTH);
+                              setAiPrompt(trimmed);
+                              if (!trimmed || trimmed.trim().length === 0) {
+                                setPromptBoxHeight(SEARCH_BAR_HEIGHT);
+                              }
+                            }}
+                            onContentSizeChange={(e) => {
+                              const contentHeight = e?.nativeEvent?.contentSize?.height || 0;
+                              if (!aiPrompt || aiPrompt.trim().length === 0) {
+                                setPromptBoxHeight(SEARCH_BAR_HEIGHT);
+                              } else {
+                                const calculatedHeight = Math.max(SEARCH_BAR_HEIGHT, Math.ceil(contentHeight + 20));
+                                setPromptBoxHeight(calculatedHeight);
+                              }
+                            }}
+                            multiline={true}
+                            scrollEnabled={false}
+                            autoCapitalize="sentences"
+                            blurOnSubmit={false}
+                            selectionColor={theme.colors.primary.default}
+                          />
+
+                          {/* Clear backspace button */}
+                          {hasPromptText && (
+                            <TouchableOpacity
+                              onPress={() => {
+                                clearAiPrompt();
+                                setPromptBoxHeight(SEARCH_BAR_HEIGHT);
+                              }}
+                              style={styles.clearButton}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                              accessibilityLabel="Clear prompt text"
+                            >
+                              <Ionicons name="backspace-outline" size={18} color={theme.colors.text.secondary} />
+                            </TouchableOpacity>
+                          )}
+
+                          {/* Send Button with Paper Plane Icon (Embedded Inside Text Box) */}
+                          <TouchableOpacity
+                            onPress={handlePromptSubmit}
+                            disabled={!hasPromptText}
+                            style={[
+                              styles.paperPlaneButton,
+                              {
+                                backgroundColor: hasPromptText ? theme.colors.primary.default : (isDark ? '#2D2925' : '#E8E2D8'),
+                                opacity: hasPromptText ? 1 : 0.6,
+                              },
+                            ]}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Send AI prompt"
+                          >
+                            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={hasPromptText ? '#FFFFFF' : theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <Path d="M22 2L11 13" />
+                              <Path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                            </Svg>
+                          </TouchableOpacity>
+                        </RNAnimated.View>
                       )}
-
-                      <TouchableOpacity
-                        onPress={handleSearchSubmit}
-                        style={[styles.submitIconBtn, { backgroundColor: theme.colors.primary.default }]}
-                        accessibilityLabel="Search"
-                      >
-                        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round">
-                          <Path d="M5 12h14" />
-                          <Path d="m12 5 7 7-7 7" />
-                        </Svg>
-                      </TouchableOpacity>
                     </RNAnimated.View>
-                  ) : (
-                    /* ================= PROMPT INPUT FIELD ================= */
-                    <RNAnimated.View style={[styles.inputRowContent, { opacity: aiModeOpacity }]}>
-                      {/* '+' Attachment Button */}
-                      <TouchableOpacity
-                        style={[styles.plusButton, { backgroundColor: isDark ? '#2B2824' : '#EFE8DE' }]}
-                        activeOpacity={0.7}
-                        onPress={handleOpenAttachmentPicker}
-                        accessibilityRole="button"
-                        accessibilityLabel="Add attachment"
-                      >
-                        <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={theme.colors.primary.default} strokeWidth="2.6" strokeLinecap="round">
-                          <Line x1="12" y1="5" x2="12" y2="19" />
-                          <Line x1="5" y1="12" x2="19" y2="12" />
-                        </Svg>
-                      </TouchableOpacity>
-
-                      {/* Multiline Prompt TextInput */}
-                      <TextInput
-                        ref={aiInputRef}
-                        style={[styles.textInput, { color: theme.colors.text.primary }]}
-                        placeholder="Ask Ghumo AI or swipe up..."
-                        placeholderTextColor={theme.colors.text.muted}
-                        value={aiPrompt}
-                        maxLength={MAX_PROMPT_LENGTH}
-                        onChangeText={(text) => {
-                          const trimmed = text.slice(0, MAX_PROMPT_LENGTH);
-                          setAiPrompt(trimmed);
-                          if (!trimmed || trimmed.trim().length === 0) {
-                            setPromptBoxHeight(SEARCH_BAR_HEIGHT);
-                          }
-                        }}
-                        onContentSizeChange={(e) => {
-                          const contentHeight = e?.nativeEvent?.contentSize?.height || 0;
-                          if (!aiPrompt || aiPrompt.trim().length === 0) {
-                            setPromptBoxHeight(SEARCH_BAR_HEIGHT);
-                          } else {
-                            const calculatedHeight = Math.max(SEARCH_BAR_HEIGHT, Math.ceil(contentHeight + 20));
-                            setPromptBoxHeight(calculatedHeight);
-                          }
-                        }}
-                        multiline={true}
-                        scrollEnabled={false}
-                        autoCapitalize="sentences"
-                        blurOnSubmit={false}
-                        selectionColor={theme.colors.primary.default}
-                      />
-
-                      {/* Clear '✕' button */}
-                      {hasPromptText && (
-                        <TouchableOpacity
-                          onPress={() => {
-                            clearAiPrompt();
-                            setPromptBoxHeight(SEARCH_BAR_HEIGHT);
-                          }}
-                          style={styles.clearButton}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Clear prompt text"
-                        >
-                          <View style={[styles.clearBadge, { backgroundColor: isDark ? '#35312D' : '#E8E2D8' }]}>
-                            <Text style={[styles.clearBadgeText, { color: theme.colors.text.secondary }]}>✕</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
-
-                      {/* Send Button with Paper Plane Icon (Embedded Inside Text Box) */}
-                      <TouchableOpacity
-                        onPress={handlePromptSubmit}
-                        disabled={!hasPromptText}
-                        style={[
-                          styles.paperPlaneButton,
-                          {
-                            backgroundColor: hasPromptText ? theme.colors.primary.default : (isDark ? '#2D2925' : '#E8E2D8'),
-                            opacity: hasPromptText ? 1 : 0.6,
-                          },
-                        ]}
-                        activeOpacity={0.8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Send AI prompt"
-                      >
-                        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={hasPromptText ? '#FFFFFF' : theme.colors.text.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <Path d="M22 2L11 13" />
-                          <Path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                        </Svg>
-                      </TouchableOpacity>
-                    </RNAnimated.View>
-                  )}
-                </RNAnimated.View>
+                  </RNAnimated.View>
+                </ProcessingOutline>
               </RNAnimated.View>
             </View>
           </GestureDetector>
@@ -683,7 +1038,7 @@ export const DynamicBottomBar: React.FC = () => {
           pointerEvents={isExpanded ? 'auto' : 'none'}
         >
           {/* Sheet Top Drag Header Area (Zone 1 Handle) */}
-          <GestureDetector gesture={headerPanGesture}>
+          <GestureDetector gesture={handlePanGesture}>
             <View style={styles.sheetHandleArea}>
               <View style={[styles.handleBar, { backgroundColor: isDark ? '#4A443F' : '#DED8D1' }]} />
             </View>
@@ -742,6 +1097,71 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 2,
     zIndex: 95,
+    gap: 8,
+  },
+  floatingHeaderContainer: {
+    flex: 1,
+    height: MAP_BUTTON_SIZE,
+    justifyContent: 'center',
+    marginLeft: 6,
+    position: 'relative',
+  },
+  floatingHeaderItem: {
+    justifyContent: 'center',
+  },
+  floatingHeaderItemAbsolute: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  floatingHeaderText: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  floatingHeaderTextDark: {
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.95)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  floatingHeaderTextLight: {
+    textShadowColor: 'rgba(255,255,255,0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  pillsScrollView: {
+    flex: 1,
+    marginLeft: 4,
+  },
+  pillsScrollContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 8,
+  },
+  mapCategoryPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  pillInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mapPillText: {
+    fontSize: 12.5,
+    fontWeight: '700',
   },
   floatingToggleButton: {
     width: MAP_BUTTON_SIZE,
